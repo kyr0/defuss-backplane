@@ -1,0 +1,58 @@
+{
+  "name": "defuss-backplane",
+  "version": "0.2.0",
+  "description": "Local, unified low-level persistence and logic layer RPC service for application service backend and MCP agents.",
+  "author": "Aron Homberg",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "bun@1.4.5",
+  "engines": {
+    "node": ">=26",
+    "bun": ">=1.4.4"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "import": "./dist/client.js"
+    }
+  },
+  "bin": {
+    "defuss-backplane": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "ARCH.md",
+    "LICENSE",
+    ".env.example"
+  ],
+  "scripts": {
+    "build": "pkgroll --clean-dist --license=dist/THIRD-PARTY-LICENSES.txt",
+    "lint": "oxlint --deny-warnings src tests scripts && tsc --noEmit && tsc -p tests && tsc -p scripts",
+    "test": "bun test tests",
+    "start": "node dist/cli.js"
+  },
+  "dependencies": {
+    "defuss-brotli": "0.3.0",
+    "defuss-dataview": "0.10.0",
+    "defuss-dbsonl": "0.9.0",
+    "defuss-dson": "1.5.1",
+    "defuss-lexicalsearch": "0.4.0",
+    "defuss-mcp": "0.6.0",
+    "defuss-rpc": "3.0.0",
+    "defuss-vfs": "0.3.0"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.4.0",
+    "@types/bun": "1.4.5",
+    "@types/node": "^26.0.0",
+    "defuss-db": "3.1.0",
+    "oxlint": "^1.0.0",
+    "pkgroll": "^2.0.0",
+    "typescript": "5.9.3"
+  }
+}
