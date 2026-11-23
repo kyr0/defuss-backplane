@@ -7,12 +7,12 @@ Local, unified low-level persistence and logic layer RPC service for application
 The source ZIP includes the installable tarball in its `release` directory. Copy the tarball into your application's directory. From that directory, install it with one of these commands.
 
 ```sh
-npm install ./defuss-backplane-0.2.0.tgz
+npm install ./defuss-backplane-0.3.0.tgz
 # or
-bun add ./defuss-backplane-0.2.0.tgz
+bun add ./defuss-backplane-0.3.0.tgz
 ```
 
-The release bundles the defuss-db engine code reached by the daemon. npm or bun installs defuss-vfs, the file engine, as a regular dependency. Installing the tarball avoids the model runtimes in the development dependency tree.
+The release bundles the defuss-db engine code reached by the daemon. npm or bun installs defuss-vfs, the file engine, and defuss-scheduler 0.1.0 as regular dependencies. Installing the tarball avoids the model runtimes in the development dependency tree.
 
 In the directory where the daemon will run, create a private bot key once. Skip this command if you already have a configured `.env`.
 
@@ -82,6 +82,35 @@ await cache.set("job-7", { state: "claimed" }, { ttlMs: 30_000, ifRevision: null
 
 Omitting `ifRevision` keeps the v0.1 write behavior. A null token requires logical absence, including an expired cache key. An insert accepts null or an omitted condition and always creates a new row. An update of an absent row returns false if its precondition passes. Recreating a deleted item issues a fresh token even for identical contents. A token applies to one item, survives daemon restarts, and remains valid across writes to other items. Route all edits through the daemon when using revisions. Native readers can still open the document store. A typed collection requires an explicit ID when its declared ID type excludes arbitrary strings.
 
+## Scheduling
+
+Start the daemon with `BACKPLANE_SCHEDULER=1` to add durable cron schedules from defuss-scheduler 0.1.0. `tenant.scheduler(bucket)` returns a defuss-scheduler queue, so its `startWorker` can run handlers against the daemon. Against a daemon started without the setting, every queue call rejects with `Method missing from server schema`.
+
+```ts
+import { startWorker } from "defuss-scheduler/worker";
+
+const jobs = tenant.scheduler("jobs");
+await jobs.create(
+  { id: "nightly", cron: "0 2 * * *", timezone: "Europe/Berlin", handler: "rollup", payload: { days: 1 } },
+  { requestId: "create-nightly" },
+);
+const worker = startWorker(jobs, {
+  workerId: "rollup-1",
+  handlers: { rollup: async (run) => ({ rolledUp: run.payload }) },
+});
+process.once("SIGTERM", () => void worker.stop());
+```
+
+| Operations | Reached through | Purpose |
+| --- | --- | --- |
+| `create`, `get`, `list`, `update`, `pause`, `resume`, `remove` | RPC and MCP | Manage schedules. A definition can carry a `ref`, a name several schedules share, and `list` and `listRuns` filter by it. |
+| `getRun`, `listRuns` | RPC and MCP | Read runs with their state, attempt, error, result and timestamps. |
+| `scheduleHistory`, `runHistory` | RPC and MCP | List every definition and state a schedule had, and every status a run went through, newest first. A run's history is erased with the run when its retention ends. |
+| `terminate` | RPC and MCP | Stop one run, one schedule, every schedule with a ref or the whole bucket at once, and record the cause on each. |
+| `claim`, `renew`, `complete`, `fail` | RPC only | Lease runs and report on them. `startWorker` calls these. |
+
+Edits take `change: { revision, requestId }`. A stale revision fails with `REVISION_CONFLICT`, an ID already in use with `ALREADY_EXISTS`, and an edit of an unknown schedule with `NOT_FOUND`. After an ambiguous response, repeat the call with the same request ID and arguments. Payloads and results are JSON. The defuss-scheduler documentation covers cron syntax, time zones, retries and worker shutdown. Install defuss-scheduler 0.1.0 in the worker's application to import `startWorker`.
+
 ## Files
 
 `tenant.vfs(bucket)` stores files as objects under relative path keys. Calls through `/rpc` and MCP carry at most 1 MiB. `upload` and `download` stream objects of any size through `/vfs/object`.
@@ -128,13 +157,13 @@ RPC error bodies carry `{code,error,status}`. The SDK throws `BackplaneError` wi
 | INVALID_ARGUMENT | 400 | Correct the arguments. |
 | UNAUTHORIZED | 401 | Send the bot key as a bearer token. |
 | FORBIDDEN | 403 | Use the loopback URL and port, and send no Origin header. |
-| NOT_FOUND | 404 | Check the endpoint path. A download of a missing object also returns this code. |
+| NOT_FOUND | 404 | Check the endpoint path. A download of a missing object or an edit of an unknown schedule also returns this code. |
 | METHOD_NOT_ALLOWED | 405 | Use the method named in the `Allow` header. |
-| ALREADY_EXISTS | 409 | Choose a different ID or edit the existing row. |
+| ALREADY_EXISTS | 409 | Choose a different ID or edit the existing row or schedule. |
 | REVISION_CONFLICT | 409 | Read the current version before deciding whether to retry. |
 | PAYLOAD_TOO_LARGE | 413 | Keep `/rpc` and `/mcp` requests under 1 MiB. Stream larger files through `/vfs/object`. |
-| BUSY | 503 | Retry with backoff. |
-| COMMIT_UNCERTAIN | 500 | Inspect the persisted value before issuing another write. |
+| BUSY | 503 | Retry with backoff. Repeat a scheduler call with the same request ID and arguments. |
+| COMMIT_UNCERTAIN | 500 | Inspect the persisted value before issuing another write. Repeat a scheduler call with its original request ID. |
 | STORAGE_ERROR | 500 | Inspect the store and filesystem. |
 | INTERNAL_ERROR | 500 | Retry once. Report repeated failures with the daemon log. |
 | DSON_REQUIRED | 422 equivalent in an MCP tool result | Repeat the read with DSON encoding. |
@@ -149,7 +178,7 @@ curl -fsS -H "Authorization: Bearer ${API_KEY}" http://127.0.0.1:43127/rpc \
   --json '{"className":"cache","methodName":"set","args":[{"app":"shop","tenant":"acme","bucket":"catalog"},"currency","EUR"]}'
 ```
 
-Configure the agent's Streamable HTTP transport with endpoint `http://127.0.0.1:43127/mcp` and the same Authorization header. Tool discovery lists the ten cache and document operations and `vfs.put`, `vfs.get`, `vfs.head`, `vfs.list` and `vfs.delete`, each with its input schema. For example, call `cache.get` with these arguments.
+Configure the agent's Streamable HTTP transport with endpoint `http://127.0.0.1:43127/mcp` and the same Authorization header. Tool discovery lists the ten cache and document operations and `vfs.put`, `vfs.get`, `vfs.head`, `vfs.list` and `vfs.delete`, each with its input schema. With scheduling on, it also lists the twelve `scheduler.` management tools. For example, call `cache.get` with these arguments.
 
 ```json
 {"scope":{"app":"shop","tenant":"acme","bucket":"catalog"},"key":"currency"}
@@ -164,6 +193,7 @@ The result is available as `structuredContent.value`. A native value that would 
 | `API_KEY` | Required bot key. Use printable ASCII without whitespace. Every holder may access every tenant. |
 | `PORT` | Listener port, default 43127. The host is fixed. |
 | `BACKPLANE_DATA_DIR` | Data root, default `./var/data` relative to the daemon working directory. |
+| `BACKPLANE_SCHEDULER` | `1` opens the scheduler in the `scheduler` directory of the data root. Default `0`. Any other value stops startup. |
 
 App, tenant and bucket identifiers accept 1 to 48 valid UTF-8 bytes. Cache keys and file keys accept 1 to 1,024 valid UTF-8 bytes. Stop the service with SIGTERM or SIGINT. To back up the whole service, stop writers, shut down the daemon, then copy the data root. An application's own authentication determines which tenant it passes to the service.
 

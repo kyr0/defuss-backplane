@@ -103,10 +103,11 @@ const query = {
   additionalProperties: false,
 };
 
-export function makeTools() {
+/** `scheduling` adds the twelve scheduler management tools. Workers use RPC, so claim, renew, complete and fail have no tool. */
+export function makeTools(scheduling = false) {
   const compile = ajvValidator();
   const tools = createMcpApi(
-    { name: "defuss-backplane", version: "0.2.0" },
+    { name: "defuss-backplane", version: "0.3.0" },
     {
       compile: (schema) => {
         const validate = compile(schema);
@@ -134,11 +135,19 @@ export function makeTools() {
     const [namespace, method] = name.split(".");
     const params = { scope, ...fields };
     const keys = Object.keys(params);
-    const read = ["get", "getVersioned", "query", "head", "list"].includes(
-      method,
-    );
-    // Cache values and documents can hold native values. VFS results are strings and numbers, so they need no DSON.
-    const native = read && namespace !== "vfs";
+    const read = [
+      "get",
+      "getVersioned",
+      "query",
+      "head",
+      "list",
+      "getRun",
+      "listRuns",
+      "scheduleHistory",
+      "runHistory",
+    ].includes(method);
+    // Cache values and documents can hold native values. VFS metadata and scheduler records are JSON, so they need no DSON.
+    const native = read && (namespace === "cache" || namespace === "db");
     const input: InputSchema = {
       type: "object",
       properties: {
@@ -230,6 +239,10 @@ export function makeTools() {
             "db.delete",
             "vfs.put",
             "vfs.delete",
+            "scheduler.update",
+            "scheduler.pause",
+            "scheduler.remove",
+            "scheduler.terminate",
           ].includes(name),
           openWorldHint: false,
         },
@@ -354,5 +367,125 @@ export function makeTools() {
     key,
     ifRevision,
   }, ["ifRevision"]);
+  if (scheduling) schedulerTools(tool);
   return tools;
+}
+
+/** The management half of a defuss-scheduler queue. Edits carry `change: { revision, requestId }`; repeating a call
+ * with the same requestId and arguments returns its first result, so an agent can retry after a lost response. */
+function schedulerTools(
+  tool: (
+    name: string,
+    description: string,
+    fields: Record<string, object>,
+    optional?: string[],
+  ) => void,
+) {
+  const change = {
+    type: "object",
+    properties: { revision: text, requestId: text },
+    required: ["revision", "requestId"],
+    additionalProperties: false,
+    description: "The schedule's current revision and a unique ID for this edit.",
+  };
+  const page = {
+    type: "object",
+    properties: {
+      limit: { type: "integer", minimum: 1, maximum: 500 },
+      cursor: text,
+      ref: { ...text, description: "List only what carries this ref." },
+    },
+    additionalProperties: false,
+  };
+  tool(
+    "scheduler.create",
+    "Create a cron schedule with an unused ID. The definition names a handler and may carry a JSON payload and a ref, a name of your own that several schedules can share.",
+    {
+      definition: object,
+      options: {
+        type: "object",
+        properties: { requestId: text },
+        required: ["requestId"],
+        additionalProperties: false,
+      },
+    },
+    ["options"],
+  );
+  tool("scheduler.get", "Read one schedule. A missing ID returns null.", {
+    id: text,
+  });
+  tool("scheduler.list", "Page through the schedules in key order.", { page }, [
+    "page",
+  ]);
+  tool(
+    "scheduler.update",
+    "Change a schedule's cron, timezone, handler, payload, capabilities, retry or misfire settings.",
+    { id: text, patch: object, change },
+  );
+  tool(
+    "scheduler.pause",
+    "Stop creating runs for a schedule. Runs already created stay eligible.",
+    { id: text, change },
+  );
+  tool(
+    "scheduler.resume",
+    "Resume a paused schedule from the next occurrence after now.",
+    { id: text, change },
+  );
+  tool(
+    "scheduler.remove",
+    "Stop a schedule for good. Its ID stays reserved.",
+    { id: text, change },
+  );
+  tool("scheduler.getRun", "Read one run. A missing ID returns null.", {
+    id: text,
+  });
+  tool("scheduler.listRuns", "Page through runs with their state and result.", {
+    page,
+  }, ["page"]);
+  // defuss-scheduler keeps every version of a schedule, and of a run until retention removes it, so an agent can ask
+  // what a job did earlier.
+  const options = {
+    type: "object",
+    properties: { limit: { type: "integer", minimum: 1, maximum: 500 } },
+    additionalProperties: false,
+  };
+  tool(
+    "scheduler.scheduleHistory",
+    "List every definition and state a schedule had, newest first. Each entry holds from, until and value.",
+    { id: text, options },
+    ["options"],
+  );
+  tool(
+    "scheduler.runHistory",
+    "List every status a run went through, newest first. Retention erases the history with the run.",
+    { id: text, options },
+    ["options"],
+  );
+  tool(
+    "scheduler.terminate",
+    "Stop work at once and record why. Unlike pause and remove it does not wait for due occurrences. Schedules and unfinished runs, running ones included, end as terminated with the cause.",
+    {
+      target: {
+        type: "object",
+        properties: {
+          run: text,
+          schedule: text,
+          ref: text,
+          all: { const: true },
+        },
+        minProperties: 1,
+        maxProperties: 1,
+        additionalProperties: false,
+        description:
+          "Exactly one of: run (one run ID), schedule (one schedule and its runs), ref (every schedule carrying it), all (the whole scope).",
+      },
+      options: {
+        type: "object",
+        properties: { cause: text },
+        required: ["cause"],
+        additionalProperties: false,
+      },
+    },
+  );
 }

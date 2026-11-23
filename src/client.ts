@@ -12,6 +12,7 @@ import type {
   VfsRange,
   VfsRead,
 } from "./vfs.js";
+import type { Queue } from "defuss-scheduler";
 import { settings } from "./config.js";
 
 import { BackplaneError, statuses, type ErrorCode } from "./errors.js";
@@ -23,6 +24,20 @@ import type {
 export { BackplaneError };
 export type { ErrorCode, CacheWriteOptions, Versioned, WriteOptions };
 export type { Scope } from "./scope.js";
+export type {
+  Change,
+  Claim,
+  ClaimResult,
+  Definition,
+  Lease,
+  Outcome,
+  Page,
+  PageOptions,
+  Patch,
+  Queue,
+  Run,
+  Schedule,
+} from "defuss-scheduler";
 export type { CacheResult } from "./cache.js";
 export type { Row, InputRow, Query } from "./db.js";
 export type {
@@ -162,6 +177,36 @@ export async function connectBackplane(options: {
               call<boolean>("db", "delete", [scope, id, options]),
             query: (request: Query = {}) =>
               call<{ rows: Partial<T>[] }>("db", "query", [scope, request]),
+          };
+        },
+        /** One scheduler queue. It is also a defuss-scheduler WorkerPort, so `startWorker` accepts it. Against a
+         * daemon started without BACKPLANE_SCHEDULER=1, every call rejects with "Method missing from server schema". */
+        scheduler(bucket: string): Queue {
+          const scope = { app, tenant, bucket };
+          const method =
+            <K extends keyof Queue>(name: K) =>
+            (...args: Parameters<Queue[K]>) =>
+              call<Awaited<ReturnType<Queue[K]>>>("scheduler", name, [
+                scope,
+                ...args,
+              ]);
+          return {
+            create: method("create"),
+            get: method("get"),
+            list: method("list"),
+            update: method("update"),
+            pause: method("pause"),
+            resume: method("resume"),
+            remove: method("remove"),
+            getRun: method("getRun"),
+            listRuns: method("listRuns"),
+            scheduleHistory: method("scheduleHistory"),
+            runHistory: method("runHistory"),
+            terminate: method("terminate"),
+            claim: method("claim"),
+            renew: method("renew"),
+            complete: method("complete"),
+            fail: method("fail"),
           };
         },
         vfs(bucket: string) {

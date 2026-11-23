@@ -1,6 +1,6 @@
 {
   "name": "defuss-backplane",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Local, unified low-level persistence and logic layer RPC service for application service backend and MCP agents.",
   "author": "Aron Homberg",
   "license": "MIT",
@@ -44,6 +44,7 @@
     "defuss-lexicalsearch": "0.4.0",
     "defuss-mcp": "0.6.0",
     "defuss-rpc": "3.0.0",
+    "defuss-scheduler": "0.1.0",
     "defuss-vfs": "0.3.0"
   },
   "devDependencies": {

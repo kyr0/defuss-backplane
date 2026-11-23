@@ -44,3 +44,16 @@ Wrap: EVERY lead becomes a test | .vae/VERIFY.py rule | one MEMORY line with BC,
 2026-11-22T15:38:35Z s=dcdb118f FINDING src/server.ts:1 file comment learn=none: Comment accuracy; not mechanically checkable.
 2026-11-22T15:48:29Z s=dcdb118f DONE fp=554a09784390 cov=98.6% paths=.github/workflows/verify.yml,AGENTS.md,ARCH.md,CHANGELOG.md(+35)
 2026-11-22T15:48:29Z s=dcdb118f FINDING README.md:3 B01/P learn=none: Human-chosen product wording; not mechanically checkable.
+2026-11-22T21:44:39Z s=dcdb118f DONE fp=ec12708bd2a6 cov=96.9% paths=ARCH.md,CHANGELOG.md,README.md,bun.lock(+14)
+2026-11-22T21:44:39Z s=dcdb118f FINDING src/server.ts:55 createRpcServer scheduler learn=test: tests/scheduler.test.ts asserts ALREADY_EXISTS 409, NOT_FOUND 404, INVALID_ARGUMENT 400 and MCP REVISION_CONFLICT 409.
+2026-11-22T21:44:39Z s=dcdb118f FINDING tests/daemon.ts:37 start learn=none: Test-harness isolation; the e2e already strips the variable from the daemon env.
+2026-11-22T21:44:39Z s=dcdb118f FINDING README.md:89 B01/P learn=none: Wording precision; not mechanically checkable.
+2026-11-22T21:44:39Z s=dcdb118f FINDING ARCH.md Scheduling P learn=none: Wording precision; not mechanically checkable.
+2026-11-22T21:44:39Z s=dcdb118f FINDING package.json:56 defuss-scheduler file:../defuss-scheduler learn=none: Depends on a human release decision for defuss-scheduler.
+2026-11-23T21:01:51Z s=dcdb118f DONE fp=2f559d207432 cov=98.8% paths=ARCH.md,CHANGELOG.md,README.md,bun.lock(+14)
+2026-11-23T21:01:51Z s=dcdb118f FINDING package.json:56 devDependencies.defuss-scheduler learn=verifier: VERIFIED: rule backplane.registry-deps in .vae/VERIFY.py rejects file:, link: and portal: specifiers in package.json.
+2026-11-23T21:01:51Z s=dcdb118f FINDING ARCH.md:10, ARCH.md:68 B01/P learn=none: VERIFIED: wording against an upstream document; no rule kind can check it.
+2026-11-23T21:01:51Z s=dcdb118f FINDING README.md:15, README.md:112, README.md:202, CHANGELOG.md:5 learn=verifier: VERIFIED: the same backplane.registry-deps rule removes the condition these sentences described.
+2026-11-23T21:01:51Z s=dcdb118f FINDING src/tools.ts:446 schedulerTools history comment learn=none: VERIFIED: comment wording against an upstream document; no rule kind can check it.
+2026-11-23T22:42:45Z s=dcdb118f DONE fp=8f3788b61aa2 cov=98.8% paths=ARCH.md,CHANGELOG.md,README.md,bun.lock(+14)
+2026-11-23T22:42:45Z s=dcdb118f FINDING src/tools.ts:110 McpServer version, scripts/e2e.ts:27 and :331 learn=verifier: VERIFIED: rule backplane.version-sync in .vae/VERIFY.py fails when src/tools.ts or scripts/e2e.ts disagree with package.json; a probe with 0.2.9 in tools.ts mad

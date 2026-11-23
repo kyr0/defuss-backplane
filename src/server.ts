@@ -10,13 +10,16 @@ import { createMcpHttp } from "defuss-mcp/http";
 import { createRpcServer, rpcRoute } from "defuss-rpc/server";
 import { createServices } from "./services.js";
 import { makeTools } from "./tools.js";
-import { capture, httpCode, withFaults } from "./faults.js";
+import { capture, httpCode, observeMethods, withFaults } from "./faults.js";
 import type { WriteOptions } from "./revisions.js";
 import type { Scope } from "./scope.js";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
-import { dataRoot, settings } from "./config.js";
+import { join } from "node:path";
+import { openScheduler } from "defuss-scheduler";
+import { schedulerApi } from "./scheduler.js";
+import { dataRoot, schedulerEnabled, settings } from "./config.js";
 
 const limit = 1024 * 1024;
 const digest = (value: string) => createHash("sha256").update(value).digest();
@@ -41,9 +44,17 @@ function precondition(headers: IncomingHttpHeaders): WriteOptions {
 export async function listen() {
   const config = settings();
   const credential = digest("Bearer " + config.apiKey);
+  // App directories start with `x` (see scope.ts), so none can be named `scheduler`. The scheduler's file lock makes a
+  // second daemon on the same data root fail here, before it registers or listens.
+  const scheduler = schedulerEnabled()
+    ? await openScheduler({ directory: join(dataRoot(), "scheduler") })
+    : undefined;
   const services = createServices(dataRoot());
-  createRpcServer(services.api);
-  const mcp = createMcpHttp(makeTools(), {
+  createRpcServer({
+    ...services.api,
+    ...(scheduler && { scheduler: observeMethods(schedulerApi(scheduler)) }),
+  });
+  const mcp = createMcpHttp(makeTools(!!scheduler), {
     mode: "json",
     maxBodyBytes: limit,
     allowedOrigins: [],
@@ -183,13 +194,19 @@ export async function listen() {
   // An upload or download may outlast any fixed request deadline. Shutdown bounds open transfers instead.
   server.requestTimeout = 0;
   server.headersTimeout = 15_000;
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(config.port, "127.0.0.1", () => {
-      server.off("error", reject);
-      resolve();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(config.port, "127.0.0.1", () => {
+        server.off("error", reject);
+        resolve();
+      });
     });
-  });
+  } catch (error) {
+    await Promise.all([services.close(), scheduler?.close()]);
+    createRpcServer({});
+    throw error;
+  }
   const socket = server.address();
   if (!socket || typeof socket === "string" || socket.address !== "127.0.0.1") {
     server.close();
@@ -212,7 +229,7 @@ export async function listen() {
       }
       await Promise.allSettled(active);
       await mcp.close();
-      await services.close();
+      await Promise.all([services.close(), scheduler?.close()]);
       // The registry is process-wide and keeps its first registration, so a later daemon in this process needs it empty.
       createRpcServer({});
     },

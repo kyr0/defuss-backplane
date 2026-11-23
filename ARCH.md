@@ -5,9 +5,9 @@ The daemon binds a single IPv4 socket to 127.0.0.1. Node.js and Bun run the same
 | Boundary | Responsibility |
 | --- | --- |
 | Server | Validates Host, Origin and the bot credential before dispatch, including schema and tool discovery. Caps `/rpc` and `/mcp` request bodies at 1 MiB. `/vfs/object` streams file bytes in either direction without that cap. |
-| RPC | defuss-rpc registers the cache, database and file functions and returns DSON results. The backend client authenticates its own discovery fetch because defuss-rpc 3.0.0 omits custom headers on that request. |
+| RPC | defuss-rpc registers the cache, database and file functions, and the scheduler functions when scheduling is on, and returns DSON results. The backend client authenticates its own discovery fetch because defuss-rpc 3.0.0 omits custom headers on that request. |
 | MCP | defuss-mcp publishes named JSON schemas and validates the arguments. The adapter maps named fields into the RPC call order and passes each call to the same in-process dispatcher. A document can have arbitrary fields, so the adapter uses the registry's JSON schema API. |
-| Engines | defuss-dbsonl 0.9.0 stores cache entries. defuss-db 3.1.0 stores documents in named collections. defuss-vfs 0.3.0 stores files in one volume per bucket. Each service module owns one handle pool. |
+| Engines | defuss-dbsonl 0.9.0 stores cache entries. defuss-db 3.1.0 stores documents in named collections. defuss-vfs 0.3.0 stores files in one volume per bucket. Each of these service modules owns one handle pool. defuss-scheduler 0.1.0 stores schedules and runs for every scope in one authority, in its own defuss-db database with a version history of each. |
 
 ## Request flow
 
@@ -24,9 +24,11 @@ flowchart LR
   rpc --> cache["cache.ts"]
   rpc --> db["db.ts"]
   rpc --> vfs
+  rpc -->|"BACKPLANE_SCHEDULER=1"| sched["scheduler.ts"]
   cache --> dbsonl["defuss-dbsonl: one store per cache bucket"]
   db --> ddb["defuss-db: document databases per tenant"]
   vfs --> volume["defuss-vfs: one volume per file bucket"]
+  sched --> authority["defuss-scheduler: one authority in scheduler/"]
 ```
 
 `faults.ts` wraps each dispatch so that a service fault keeps its code and status in both protocols. `scope.ts` validates and encodes the scope, key and ID before `cache.ts`, `db.ts` or `vfs.ts` leases a handle from its own `pool.ts` pool. `storage.ts` holds the filesystem checks that the pools use, and `services.ts` composes the three services for the daemon and the tests. Splitting by engine keeps each revision protocol next to the store whose transaction it relies on. The pure validation stays separate from the filesystem.
@@ -43,6 +45,12 @@ Each engine pool holds up to 32 handles. A lease keeps its handle open until the
 
 Cache TTL is an absolute expiry on the daemon clock. A read reports an expired entry as a miss. Expired entries stay on disk until overwritten or explicitly deleted. A cold read checks the shard directory under the pool admission queue. Only a confirmed empty or missing directory qualifies as absent. Existing stores open with creation disabled so an I/O failure propagates. Each write uses its engine's commit protocol. Operations across engines commit independently. A streamed upload publishes the object once, after its last chunk, so a failed upload leaves the previous object and revision.
 
+## Scheduling
+
+The scheduler keeps one authority open from startup to shutdown in the `scheduler` directory of the data root. Encoded app directories start with `x`, so no app can claim that name. Every scope is a key prefix inside the authority. The storage services instead open a store per bucket on demand, and their pools close idle stores at capacity. The defuss-scheduler documentation places calendar production and lease expiry in the open authority's maintenance loop, so a pooled authority would stop creating runs whenever the pool closed it. `scheduler.ts` checks each scope with the storage services' rules and then calls the scoped queue, so every service accepts the same app, tenant and bucket names.
+
+Scheduling is opt-in. The authority runs maintenance every 250 ms by default, per its documentation, and holds an exclusive lock on its directory. VERIFIED by test: a second scheduling daemon on the same data root fails with `OWNER_BUSY` before it listens. Scheduler faults map to the shared codes. A call that reaches a closed authority returns `BUSY`, and an unreadable store returns `STORAGE_ERROR`. MCP exposes only the management operations. Workers claim and report over RPC, which carries the lease identity in typed arguments.
+
 ## Revisions
 
 A file's revision is the content revision that defuss-vfs stores with the object. A conditional write passes the token as `ifMatch`, and a null token as `ifAbsent`, so the comparison and the publication share one volume transaction.
@@ -55,12 +63,12 @@ Each network call owns its fault context. The adapters preserve engine error cod
 
 ## Security and operations
 
-The daemon requires a bearer key for every network request. It accepts Host values for 127.0.0.1 or localhost at its configured port and rejects any request carrying Origin. The backend client uses a literal loopback URL and rejects redirects. Local processes sharing a bot key share access to all app shards. A backend derives tenant selection from its own authenticated request. Containers need a common network namespace to use this listener.
+The daemon requires a bearer key for every network request. It accepts Host values for 127.0.0.1 or localhost at its configured port and rejects any request carrying Origin. The backend client uses a literal loopback URL and rejects redirects. Local processes sharing a bot key share access to all app shards, including every scope's schedules and runs. The daemon does not mount the defuss-scheduler HTTP worker endpoint. An application that serves remote workers mounts it behind its own authentication. A backend derives tenant selection from its own authenticated request. Containers need a common network namespace to use this listener.
 
-The service creates data directories with owner-only mode on POSIX. Run it under an account that owns its data root and credentials. Cache entries, documents and files persist on disk unencrypted and may contain personal data supplied by the application. The application operator controls retention and backups. The listener has no total request deadline, so long transfers can finish. On shutdown it stops accepting connections and gives active requests 3 seconds, then closes the remaining connections before the engine pools close. VERIFIED by probe and the packed-consumer test: a client that stops reading a large download keeps its connection open, and the daemon still exits 0 on SIGTERM. Closing the connection aborts an unfinished upload, which keeps the previous object.
+The service creates data directories with owner-only mode on POSIX. Run it under an account that owns its data root and credentials. Cache entries, documents, files, schedule payloads and run results persist on disk unencrypted and may contain personal data supplied by the application. The scheduler keeps every version of a schedule, payloads included. The daemon keeps the default run retention, so the defuss-scheduler documentation places the removal of a finished run, with its history, payload, result and error text, one day after it ends. The application operator controls the other data's retention and backups. The listener has no total request deadline, so long transfers can finish. On shutdown it stops accepting connections and gives active requests 3 seconds, then closes the remaining connections before the engine pools and the scheduler close. VERIFIED by probe and the packed-consumer test: a client that stops reading a large download keeps its connection open, and the daemon still exits 0 on SIGTERM. Closing the connection aborts an unfinished upload, which keeps the previous object.
 
-The packed-consumer test installs the tarball into a temporary application and exercises all fifteen tools. It uses the official MCP client, curl and the typed client. It starts from a fixture written by the v0.1.0 release tarball (SHA-256 fec0fccbbb34e0933578cb9094ddecb994117ccbb4935bf9ff6d1f97928f09d8). Each of six consumer phases upgrades one legacy cache entry and document. Restarts on the same files check revision continuity across runtimes. Concurrent RPC and MCP writes using the same token verify one winning mutation per item. Each phase streams a file larger than 1 MiB through the client and through curl, and the next phase reads the previous phase's file on the other runtime.
+The packed-consumer test installs the tarball into a temporary application and exercises all fifteen tools, and all twenty-seven with scheduling on. It uses the official MCP client, curl and the typed client. It starts from a fixture written by the v0.1.0 release tarball (SHA-256 fec0fccbbb34e0933578cb9094ddecb994117ccbb4935bf9ff6d1f97928f09d8). Each of six consumer phases upgrades one legacy cache entry and document. Restarts on the same files check revision continuity across runtimes. Concurrent RPC and MCP writes using the same token verify one winning mutation per item. Each phase streams a file larger than 1 MiB through the client and through curl, and the next phase reads the previous phase's file on the other runtime. Two more phases start the daemon with `BACKPLANE_SCHEDULER=1`. A Node.js daemon with a Bun consumer creates and edits a schedule, races sixteen claims for one grant and completes a retried run. A Bun daemon with a Node.js consumer then reads the paused schedule and the run result over RPC and MCP, and resumes, removes and creates schedules.
 
 The consumer scripts are TypeScript files that Node.js type stripping and Bun run without a build step. Before they run, the strict compiler checks them against the packed declarations and rejects syntax that type stripping cannot erase.
 
-In each of the three daemon runs, lsof must list `127.0.0.1:<port>` as the daemon's only TCP listener; it lists wildcard IPv4 and IPv6 listeners as `*:<port>`. A connection attempt to 127.0.0.2 cannot make this distinction on the macOS development host: that address is unassigned there, so wildcard and loopback listeners both time out.
+In each of the three storage phases, lsof must list `127.0.0.1:<port>` as the daemon's only TCP listener; it lists wildcard IPv4 and IPv6 listeners as `*:<port>`. A connection attempt to 127.0.0.2 cannot make this distinction on the macOS development host: that address is unassigned there, so wildcard and loopback listeners both time out.

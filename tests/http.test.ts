@@ -1,54 +1,7 @@
 import { test, expect } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { createServer } from "node:net";
-import { listen } from "../src/server.js";
 import { connectBackplane } from "../src/client.js";
-import {
-  Client,
-  StreamableHTTPClientTransport,
-} from "@modelcontextprotocol/client";
 import { randomBytes } from "node:crypto";
-
-/** Starts a daemon on a free port with a fresh data root and key, and restores the environment when it stops. */
-async function start() {
-  const tmp = await mkdtemp(join(tmpdir(), "backplane-http-"));
-  const probe = createServer();
-  await new Promise<void>((done) => probe.listen(0, "127.0.0.1", done));
-  const address = probe.address();
-  if (!address || typeof address === "string")
-    throw new Error("Missing socket");
-  await new Promise<void>((done) => probe.close(() => done()));
-  const names = ["PORT", "API_KEY", "BACKPLANE_DATA_DIR"];
-  const old = names.map((k) => process.env[k]);
-  const apiKey = randomBytes(24).toString("hex");
-  process.env.PORT = String(address.port);
-  process.env.API_KEY = apiKey;
-  process.env.BACKPLANE_DATA_DIR = tmp;
-  const daemon = await listen();
-  const headers = { Authorization: "Bearer " + apiKey };
-  const agent = new Client({ name: "integration", version: "1" });
-  await agent.connect(
-    new StreamableHTTPClientTransport(new URL(daemon.url + "/mcp"), {
-      requestInit: { headers },
-    }),
-  );
-  return {
-    daemon,
-    headers,
-    agent,
-    async stop() {
-      await agent.close();
-      await daemon.close();
-      for (const [i, k] of names.entries()) {
-        if (old[i] === undefined) delete process.env[k];
-        else process.env[k] = old[i];
-      }
-      await rm(tmp, { recursive: true, force: true });
-    },
-  };
-}
+import { start } from "./daemon.js";
 
 test("authenticated discovery, shared RPC/MCP calls and loopback HTTP policy", async () => {
   const { daemon, headers, agent, stop } = await start();

@@ -1,5 +1,6 @@
 /** VERIFIED: Preserve typed service exceptions across adapters that reduce thrown values to messages. */
 import { AsyncLocalStorage } from "node:async_hooks";
+import { SchedulerError } from "defuss-scheduler";
 import { BackplaneError, type ErrorCode } from "./errors.js";
 
 interface FaultContext {
@@ -26,6 +27,14 @@ export function capture(error: unknown) {
 }
 function normalize(error: unknown) {
   if (error instanceof BackplaneError) return error;
+  if (error instanceof SchedulerError) {
+    // A stopped or foreign authority clears once its owner restarts, so the caller retries as for BUSY.
+    if (error.code === "CLOSED" || error.code === "OWNER_BUSY")
+      return new BackplaneError("BUSY", "Scheduler unavailable");
+    if (error.code === "FORMAT")
+      return new BackplaneError("STORAGE_ERROR", "Scheduler store unreadable");
+    return new BackplaneError(error.code, error.message);
+  }
   const code = (error as { code?: unknown } | null)?.code;
   if (code === "DUPLICATE_KEY")
     return new BackplaneError(

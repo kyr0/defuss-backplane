@@ -59,8 +59,15 @@ RULES += [
     {"id": "backplane.network", "kind": "contains", "path": "ARCH.md",
      "text": "127.0.0.1", "claim": "architecture specifies the loopback listener"},
     {"id": "backplane.install", "kind": "contains", "path": "README.md",
-     "text": "defuss-backplane-0.2.0.tgz", "claim": "quick start installs the tested package"},
+     "text": "defuss-backplane-0.3.0.tgz", "claim": "quick start installs the tested package"},
     {"id": "backplane.typescript", "kind": "command",
      "command": "test -z \"$(find src tests scripts -type f \\( -name '*.js' -o -name '*.mjs' -o -name '*.cjs' -o -name '*.jsx' \\) -print)\"",
      "claim": "sources, tests and scripts stay TypeScript; the lint step type-checks all three"},
+    {"id": "backplane.registry-deps", "kind": "not_regex", "path": "package.json",
+     "pattern": r"\"(?:file|link|portal):",
+     "claim": "dependencies resolve from the registry, so a CI checkout without sibling repos installs them"},
+    {"id": "backplane.version-sync", "kind": "command",
+     "command": "v=$(node -p \"require('./package.json').version\") && grep -q \"version: \\\"$v\\\"\" src/tools.ts"
+                " && grep -q \"version: \\\"$v\\\"\" scripts/e2e.ts && grep -qF \"defuss-backplane-$v.tgz\" scripts/e2e.ts",
+     "claim": "the MCP server version and the packed-consumer tarball follow package.json"},
 ]

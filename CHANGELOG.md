@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
+
+Added opt-in cron scheduling on defuss-scheduler 0.1.0. With `BACKPLANE_SCHEDULER=1`, the daemon opens one scheduler in the data root. `tenant.scheduler(bucket)` returns a queue that defuss-scheduler's `startWorker` accepts, and twelve MCP tools manage schedules, read runs and their histories, and stop work at once.
 
 Added a file service on defuss-vfs 0.3.0. `tenant.vfs(bucket)` and five MCP tools put, get, head, list and delete objects under relative path keys, with the same revision tokens as cache entries and documents. `upload`, `download` and the `/vfs/object` endpoint stream objects larger than the 1 MiB request limit. The README error table now lists every code the service returns.
 

@@ -13,3 +13,10 @@ export function settings(options: { port?: number; apiKey?: string } = {}) {
 export function dataRoot() {
   return resolve(process.env.BACKPLANE_DATA_DIR || "./var/data");
 }
+/** Scheduling is off unless BACKPLANE_SCHEDULER is 1, so a daemon without schedules runs no maintenance loop. */
+export function schedulerEnabled() {
+  const value = process.env.BACKPLANE_SCHEDULER ?? "";
+  if (!["", "0", "1"].includes(value))
+    throw new Error("BACKPLANE_SCHEDULER must be 0 or 1");
+  return value === "1";
+}

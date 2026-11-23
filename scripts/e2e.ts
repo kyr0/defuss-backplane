@@ -24,7 +24,7 @@ import { setTimeout as pause } from "node:timers/promises";
 
 const exec = promisify(execFile);
 const tmp = await mkdtemp(join(tmpdir(), "backplane-consumer-"));
-const tarball = await realpath("output/defuss-backplane-0.2.0.tgz");
+const tarball = await realpath("output/defuss-backplane-0.3.0.tgz");
 const fixture = resolve("input/acceptance.json");
 const cli = join(tmp, "node_modules/defuss-backplane/dist/cli.js");
 const consumerScripts = [
@@ -32,6 +32,7 @@ const consumerScripts = [
   "consumer-revisions.ts",
   "consumer-types.ts",
   "consumer-vfs.ts",
+  "consumer-scheduler.ts",
 ];
 const bot = randomBytes(32).toString("hex");
 const listener = createServer();
@@ -49,7 +50,8 @@ const env = {
   BACKPLANE_DATA_DIR: join(tmp, "data"),
 };
 const daemonEnv: NodeJS.ProcessEnv = { ...env };
-for (const k of ["API_KEY", "PORT", "BACKPLANE_DATA_DIR"]) delete daemonEnv[k];
+for (const k of ["API_KEY", "PORT", "BACKPLANE_DATA_DIR", "BACKPLANE_SCHEDULER"])
+  delete daemonEnv[k];
 const observed: Record<string, unknown>[] = [];
 /** Matches the rejection of a promisified execFile that exited with `code` and printed `stderr`. */
 const failedWith = (code: number, stderr: RegExp) => (error: unknown) => {
@@ -65,11 +67,18 @@ async function exitCode(child: ChildProcess): Promise<number | null> {
   return (await once(child, "exit"))[0];
 }
 /** Starts one daemon under `runtime` on the shared data root, then runs the consumer under the same runtime and its
- * peer. VERIFIED: one daemon per phase on one disk root checks restart durability and cross-runtime reads together. */
-async function runPhase(runtime: string, phase: string, previous: string) {
+ * peer. VERIFIED: one daemon per phase on one disk root checks restart durability and cross-runtime reads together.
+ * A scheduling phase enables the scheduler and runs only its consumer, under the peer runtime. */
+async function runPhase(
+  runtime: string,
+  phase: string,
+  previous: string,
+  scheduling = false,
+) {
+  const peer = runtime === "bun" ? "node" : "bun";
   const child = spawn(runtime, [cli], {
     cwd: tmp,
-    env: daemonEnv,
+    env: scheduling ? { ...daemonEnv, BACKPLANE_SCHEDULER: "1" } : daemonEnv,
     stdio: ["ignore", "pipe", "pipe"],
   });
   let log = "";
@@ -92,11 +101,21 @@ async function runPhase(runtime: string, phase: string, previous: string) {
       url + "/rpc/schema",
     ]);
     const modules: { moduleName: string }[] = JSON.parse(schema.stdout);
-    assert.deepEqual(modules.map((item) => item.moduleName).sort(), [
-      "cache",
-      "db",
-      "vfs",
-    ]);
+    assert.deepEqual(
+      modules.map((item) => item.moduleName).sort(),
+      scheduling
+        ? ["cache", "db", "scheduler", "vfs"]
+        : ["cache", "db", "vfs"],
+    );
+    if (scheduling) {
+      const { stdout } = await exec(peer, ["consumer-scheduler.ts", phase], {
+        cwd: tmp,
+        env,
+        timeout: 30000,
+      });
+      observed.push({ daemon: runtime, ...JSON.parse(stdout.trim()) });
+      return;
+    }
     const rpc = await exec("curl", [
       "-fsS",
       "-H",
@@ -172,7 +191,6 @@ async function runPhase(runtime: string, phase: string, previous: string) {
       { cwd: tmp, env, timeout: 30000 },
     );
     observed.push({ daemon: runtime, ...JSON.parse(stdout.trim()) });
-    const peer = runtime === "bun" ? "node" : "bun";
     const mixed = await exec(
       peer,
       ["consumer.ts", phase + "-peer", phase, fixture],
@@ -290,6 +308,8 @@ try {
   await exec("bun", ["install"], { cwd: tmp, timeout: 120000 });
   await runPhase("bun", "bun-second", "node-first");
   await runPhase("node", "node-last", "bun-second");
+  await runPhase("node", "scheduler-write", "-", true);
+  await runPhase("bun", "scheduler-read", "scheduler-write", true);
   const scope: { app: string; tenant: string; bucket: string } = JSON.parse(
     await readFile(fixture, "utf8"),
   );
@@ -308,7 +328,7 @@ try {
     await native.close();
   }
   const evidence = {
-    version: "0.2.0",
+    version: "0.3.0",
     platform: process.platform,
     arch: process.arch,
     tarballSha256: createHash("sha256")

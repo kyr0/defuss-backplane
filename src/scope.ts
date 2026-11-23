@@ -24,6 +24,15 @@ export function component(value: unknown) {
   return "x" + Buffer.from(value).toString("hex");
 }
 
+/** Rejects a scope whose fields the storage services would reject, so every service accepts the same names. */
+export function checkedScope(scope: Scope) {
+  record(scope, "scope");
+  component(scope.app);
+  component(scope.tenant);
+  component(scope.bucket);
+  return scope;
+}
+
 /** The tenant directory and encoded bucket name for a scope under the data root. */
 export function address(root: string, scope: Scope) {
   record(scope, "scope");
