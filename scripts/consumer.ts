@@ -57,6 +57,20 @@ try {
     "db.insert",
     "db.query",
     "db.update",
+    "logs.read",
+    "logs.write",
+    "scheduler.create",
+    "scheduler.get",
+    "scheduler.getRun",
+    "scheduler.list",
+    "scheduler.listRuns",
+    "scheduler.pause",
+    "scheduler.remove",
+    "scheduler.resume",
+    "scheduler.runHistory",
+    "scheduler.scheduleHistory",
+    "scheduler.terminate",
+    "scheduler.update",
     "vfs.delete",
     "vfs.get",
     "vfs.head",
@@ -124,13 +138,32 @@ try {
       .get(phase),
     null,
   );
+  // The tenant's log takes an MCP write and returns it over RPC with a Date timestamp; the app log does the reverse.
+  // Every phase shares the data root, so earlier phases' records are there too.
+  const logScope = { app: scope.app, tenant: scope.tenant };
+  const mcpWrite = await agent.callTool({
+    name: "logs.write",
+    arguments: { scope: logScope, entries: [{ level: "warn", message: "phase " + phase }] },
+  });
+  assert.ok(!mcpWrite.isError, JSON.stringify(mcpWrite.structuredContent));
+  const warnings = await tenant.logs().read({ levels: ["warn"], limit: 1000 });
+  assert.ok(warnings.records.some((r) => r.message === "phase " + phase && r.ts instanceof Date));
+  assert.deepEqual(await client.logs().write([{ level: "info", message: "app " + phase }]), { written: 1 });
+  const mcpRead = await agent.callTool({ name: "logs.read", arguments: { scope: { app: scope.app }, request: { limit: 1000 } } });
+  const appLog = (mcpRead.structuredContent as { value: { records: { message: string }[] } }).value.records;
+  assert.ok(appLog.some((r) => r.message === "app " + phase));
+  // Any caller reads the daemon's own log, where this daemon's start line is, but cannot write it.
+  const own = (await connectBackplane({ app: "_backplane" })).logs();
+  const started = await own.read({ limit: 1000 });
+  assert.ok(started.records.some((r) => r.message === "listening http://127.0.0.1:" + process.env.PORT));
+  await assert.rejects(own.write([{ level: "error", message: "forged" }]), (e: { code?: string }) => e.code === "INVALID_ARGUMENT");
   await checkRevisions({ scope, phase, previous, tenant, agent });
   await checkVfs({ scope, phase, previous, tenant, agent });
   process.stdout.write(
     JSON.stringify({
       phase,
       previous,
-      tools: 15,
+      tools: 29,
       consumer: process.versions.bun
         ? "Bun " + process.versions.bun
         : "Node.js " + process.version,

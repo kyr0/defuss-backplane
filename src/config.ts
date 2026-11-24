@@ -13,10 +13,29 @@ export function settings(options: { port?: number; apiKey?: string } = {}) {
 export function dataRoot() {
   return resolve(process.env.BACKPLANE_DATA_DIR || "./var/data");
 }
-/** Scheduling is off unless BACKPLANE_SCHEDULER is 1, so a daemon without schedules runs no maintenance loop. */
-export function schedulerEnabled() {
-  const value = process.env.BACKPLANE_SCHEDULER ?? "";
-  if (!["", "0", "1"].includes(value))
-    throw new Error("BACKPLANE_SCHEDULER must be 0 or 1");
+function flag(name: string) {
+  const value = process.env[name] ?? "";
+  if (!["", "0", "1"].includes(value)) throw new Error(name + " must be 0 or 1");
   return value === "1";
 }
+/** Origins besides loopback that scheduled RPC callbacks may call: a comma-separated list such as
+ * `https://app.internal:8443`. Each entry must be exactly an origin, without path or trailing slash. */
+export function callbackOrigins() {
+  const origins = (process.env.BACKPLANE_CALLBACK_ORIGINS ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  for (const origin of origins) {
+    let url: URL | undefined;
+    try {
+      url = new URL(origin);
+    } catch {
+      url = undefined;
+    }
+    if (!url || !["http:", "https:"].includes(url.protocol) || url.origin !== origin)
+      throw new Error("BACKPLANE_CALLBACK_ORIGINS must list origins such as https://app.internal:8443");
+  }
+  return new Set(origins);
+}
+/** OTLP push is off unless BACKPLANE_OTLP is 1, so metrics leave the host only when the operator opts in. */
+export const otlpEnabled = () => flag("BACKPLANE_OTLP");

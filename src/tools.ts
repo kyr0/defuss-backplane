@@ -2,8 +2,9 @@
 import { createMcpApi, ToolFault } from "defuss-mcp";
 import type { InputSchema } from "defuss-mcp";
 import { ajvValidator } from "defuss-mcp/validation";
-import { rpcRoute } from "defuss-rpc/server";
+import type { RpcServer } from "defuss-rpc/server";
 import { DSON } from "defuss-dson";
+import { LOG_LEVELS } from "defuss-logs";
 import { BackplaneError } from "./errors.js";
 import { capture, withFaults, toolFaultKey } from "./faults.js";
 import { isDeepStrictEqual } from "node:util";
@@ -86,6 +87,8 @@ function decodeData(result: unknown, args: Record<string, unknown>) {
   }
 }
 interface Adapter {
+  /** A scope schema other than app, tenant and bucket. */
+  scope?: object;
   /** Input fields the adapter consumes instead of forwarding. */
   fields?: Record<string, object>;
   input?(args: Record<string, unknown>): Record<string, unknown>;
@@ -103,8 +106,9 @@ const query = {
   additionalProperties: false,
 };
 
-/** `scheduling` adds the twelve scheduler management tools. Workers use RPC, so claim, renew, complete and fail have no tool. */
-export function makeTools(scheduling = false) {
+/** Each tool call goes to `rpc`, the daemon's own RPC server, so both protocols share one dispatcher and its faults.
+ * The twelve scheduler tools manage schedules. Workers use RPC, so claim, renew, complete and fail have no tool. */
+export function makeTools(rpc: Pick<RpcServer, "fetch">) {
   const compile = ajvValidator();
   const tools = createMcpApi(
     { name: "defuss-backplane", version: "0.3.0" },
@@ -133,7 +137,7 @@ export function makeTools(scheduling = false) {
     adapter: Adapter = {},
   ) {
     const [namespace, method] = name.split(".");
-    const params = { scope, ...fields };
+    const params = { scope: (adapter.scope ?? scope) as typeof scope, ...fields };
     const keys = Object.keys(params);
     const read = [
       "get",
@@ -145,9 +149,11 @@ export function makeTools(scheduling = false) {
       "listRuns",
       "scheduleHistory",
       "runHistory",
+      "read",
     ].includes(method);
-    // Cache values and documents can hold native values. VFS metadata and scheduler records are JSON, so they need no DSON.
-    const native = read && (namespace === "cache" || namespace === "db");
+    // Cache values, documents and log arguments can hold native values. VFS metadata and scheduler records are JSON,
+    // so they need no DSON.
+    const native = read && ["cache", "db", "logs"].includes(namespace);
     const input: InputSchema = {
       type: "object",
       properties: {
@@ -191,8 +197,8 @@ export function makeTools(scheduling = false) {
         // Omitted trailing options retain the same defaults as calls from a TypeScript backend.
         while (values.length && values.at(-1) === undefined) values.pop();
         const response = await withFaults(false, () =>
-          rpcRoute({
-            request: new Request("http://127.0.0.1/rpc", {
+          rpc.fetch(
+            new Request("http://127.0.0.1/rpc", {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
@@ -205,7 +211,7 @@ export function makeTools(scheduling = false) {
                 args: values,
               }),
             }),
-          }),
+          ),
         );
         const body = await response.text();
         if (!response.ok) {
@@ -215,8 +221,8 @@ export function makeTools(scheduling = false) {
           );
         }
         if (args.resultEncoding === "dson") return { dson: body };
-        const result = DSON.parse(body);
-        if (adapter.output) return adapter.output(result, args);
+        let result = DSON.parse(body);
+        if (adapter.output) result = adapter.output(result, args);
         if (native && !jsonEquivalent(result)) {
           const fault = new BackplaneError(
             "DSON_REQUIRED",
@@ -367,8 +373,95 @@ export function makeTools(scheduling = false) {
     key,
     ifRevision,
   }, ["ifRevision"]);
-  if (scheduling) schedulerTools(tool);
+  logTools(tool);
+  schedulerTools(tool);
   return tools;
+}
+
+/** Writes and reads an app's log, or one tenant's log of that app. JSON carries no dates, so timestamps travel as
+ * ISO-8601 strings and the daemon stamps entries written over MCP itself. */
+function logTools(
+  tool: (
+    name: string,
+    description: string,
+    fields: Record<string, object>,
+    optional?: string[],
+    adapter?: Adapter,
+  ) => void,
+) {
+  const scope = {
+    type: "object",
+    properties: { app: text, tenant: text },
+    required: ["app"],
+    additionalProperties: false,
+    description: "Without tenant, the app's own log. With tenant, that tenant's log of the app.",
+  };
+  const level = { type: "string", enum: [...LOG_LEVELS] };
+  tool(
+    "logs.write",
+    "Append 1 to 1000 log entries in one transaction. The daemon assigns each entry its ID and the current time.",
+    {
+      entries: {
+        type: "array",
+        minItems: 1,
+        maxItems: 1000,
+        items: {
+          type: "object",
+          properties: {
+            level,
+            message: { type: "string" },
+            args: { type: "array" },
+            context: object,
+          },
+          required: ["level", "message"],
+          additionalProperties: false,
+        },
+      },
+    },
+    [],
+    { scope },
+  );
+  const time = { type: "string", description: "ISO-8601 time such as 2026-11-24T18:00:00Z." };
+  tool(
+    "logs.read",
+    "Read log records in time order. from is inclusive, before exclusive. Pass nextAfter from the previous page as after.",
+    {
+      request: {
+        type: "object",
+        properties: {
+          from: time,
+          before: time,
+          levels: { type: "array", items: level, minItems: 1 },
+          limit: { type: "integer", minimum: 1, maximum: 1000 },
+          after: { anyOf: [text, { type: "null" }] },
+        },
+        additionalProperties: false,
+      },
+    },
+    ["request"],
+    {
+      scope,
+      input(args) {
+        const request = args.request as Record<string, unknown> | undefined;
+        if (!request) return args;
+        const dated = { ...request };
+        for (const field of ["from", "before"])
+          if (field in request) {
+            const value = new Date(request[field] as string);
+            if (Number.isNaN(value.getTime())) invalid(field + " must be an ISO-8601 time");
+            dated[field] = value;
+          }
+        return { ...args, request: dated };
+      },
+      output(result) {
+        const page = result as { records: { ts: Date }[]; nextAfter: string | null };
+        return {
+          ...page,
+          records: page.records.map((entry) => ({ ...entry, ts: entry.ts.toISOString() })),
+        };
+      },
+    },
+  );
 }
 
 /** The management half of a defuss-scheduler queue. Edits carry `change: { revision, requestId }`; repeating a call
@@ -399,7 +492,7 @@ function schedulerTools(
   };
   tool(
     "scheduler.create",
-    "Create a cron schedule with an unused ID. The definition names a handler and may carry a JSON payload and a ref, a name of your own that several schedules can share.",
+    "Create a cron schedule with an unused ID. The definition names a handler and may carry a JSON payload and a ref, a name of your own that several schedules can share. With handler _rpc the daemon itself calls an app's RPC function at each occurrence: the payload is {url, className, methodName, args}, and url must be on loopback or an allowed origin.",
     {
       definition: object,
       options: {

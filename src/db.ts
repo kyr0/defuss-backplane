@@ -5,8 +5,6 @@ import { createFileBackend } from "defuss-dbsonl/server";
 import { openDatabase } from "defuss-db";
 import type {
   Database,
-  DatabaseSnapshot,
-  DatabaseTransaction,
   Document,
   FindRequest,
   PrimaryKey,
@@ -30,11 +28,14 @@ export type Query = Pick<
   "filters" | "sorters" | "offset" | "limit"
 > & { projection?: string[] };
 type Stamp = { id: PrimaryKey; token: string };
+/** What `version` reads from a snapshot or a transaction. VERIFIED by tsc: defuss-db 3.3.0 overloads `collection` for
+ * `_collections`, and TypeScript resolves no overload of a method called on the union of the two classes. */
+type Reader = { collection(name: string): { get(id: PrimaryKey): Promise<unknown> } };
 
-/** Encoded user collections start with `x`; the companion revision collection swaps it for `v`, so the two names
- * never collide and application bucket names cannot address the revisions. */
+/** The companion revision collection. No encoded bucket name contains `_`, so no bucket can address it, and the
+ * longest stamp name holds 61 of defuss-db's 64 code units. */
 function stampName(name: string) {
-  return "v" + name.slice(1);
+  return name + "_rev";
 }
 
 export function createDb(root: string) {
@@ -47,35 +48,32 @@ export function createDb(root: string) {
     32,
     containsStore,
   );
-  /** Runs `work` on the bucket's collection. VERIFIED: defuss-db 3.1.0 names hold at most 64 characters, so the
-   * first 64 characters of the encoded bucket name the collection and any remaining hex digits name its database
-   * directory. Long names with a shared prefix stay distinct, and hex digits can never spell `main`, the database
-   * that short names share. */
+  /** Runs `work` on the bucket's collection in the tenant's one database. An encoded bucket name fits a defuss-db
+   * collection name, so it is the collection name. */
   function collection<R>(
     scope: Scope,
     work: (db: Database, name: string) => Promise<R>,
     absent?: () => R,
   ) {
     const { tenant, bucket } = address(root, scope);
-    const partition = bucket.slice(64) || "main";
     return stores.use(
-      join(tenant, "db", partition),
-      (db) => work(db, bucket.slice(0, 64)),
+      join(tenant, "db", "main"),
+      (db) => work(db, bucket),
       absent,
     );
   }
   /** VERIFIED: A document written before 0.2 has no stamp. Its token derives from the scope, the typed ID and the
    * database identity, so it stays stable across reads and differs between databases holding the same ID. */
   async function version(
-    view: DatabaseTransaction | DatabaseSnapshot,
+    view: Reader,
     name: string,
     id: PrimaryKey,
     scope: Scope,
     storeId: string,
   ): Promise<Versioned<Row>> {
-    const value = await view.collection<Row>(name).get(id);
+    const value = (await view.collection(name).get(id)) as Row | undefined;
     if (value === undefined) return missing();
-    const stamp = await view.collection<Stamp>(stampName(name)).get(id);
+    const stamp = (await view.collection(stampName(name)).get(id)) as Stamp | undefined;
     return {
       found: true,
       value,
@@ -243,5 +241,5 @@ export function createDb(root: string) {
       };
     },
   };
-  return { api, close: () => stores.close() };
+  return { api, handles: () => stores.stats(), close: () => stores.close() };
 }

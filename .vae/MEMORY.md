@@ -9,3 +9,4 @@ outside it, and recurrence inside one subsystem never widens it.
 Every line carries its BC and stays within 240 chars. Replace stale lines instead of appending.
 Mechanizable lessons belong in tests or .vae/VERIFY.py.
 Budget 4 KiB (`vae.py doctor --repo .`); entries are injected at session start. -->
+- VERIFIED[scripts/e2e.ts npm install --prefer-offline] a just-published dependency version fails ETARGET from npm's stale cached metadata; `npm view <pkg>@<version> version` refreshes it BC defuss-rpc 4.0.0 on 2026-11-24

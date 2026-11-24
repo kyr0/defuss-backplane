@@ -136,5 +136,5 @@ export function createCache(root: string) {
       );
     },
   };
-  return { api, close: () => stores.close() };
+  return { api, handles: () => stores.stats(), close: () => stores.close() };
 }

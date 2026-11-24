@@ -4,6 +4,7 @@ import { startWorker } from "defuss-scheduler/worker";
 import { BackplaneError, connectBackplane } from "../src/client.js";
 import { listen } from "../src/server.js";
 import { freePort, start } from "./daemon.js";
+import { OWN_APP } from "../src/logs.js";
 
 const scope = { app: "shop", tenant: "acme", bucket: "jobs" };
 const fault = (promise: Promise<unknown>) =>
@@ -13,32 +14,8 @@ const fault = (promise: Promise<unknown>) =>
       e instanceof BackplaneError ? e.code + " " + e.status : String(e),
   );
 
-test("scheduling stays off unless BACKPLANE_SCHEDULER is 1", async () => {
-  const { agent, root, stop } = await start();
-  try {
-    const tools = (await agent.listTools()).tools.map((t) => t.name);
-    expect(tools).toHaveLength(15);
-    expect(tools.some((t) => t.startsWith("scheduler."))).toBe(false);
-    const queue = (await connectBackplane({ app: scope.app }))
-      .tenant(scope.tenant)
-      .scheduler(scope.bucket);
-    await expect(queue.get("nightly")).rejects.toThrow(
-      "Method missing from server schema",
-    );
-    expect(await readdir(root)).toEqual([]);
-  } finally {
-    await stop();
-  }
-});
-
-test("an invalid BACKPLANE_SCHEDULER value stops startup", async () => {
-  await expect(start({ BACKPLANE_SCHEDULER: "yes" })).rejects.toThrow(
-    "BACKPLANE_SCHEDULER must be 0 or 1",
-  );
-});
-
 test("schedules are shared by RPC and MCP, and the client queue runs a worker", async () => {
-  const { agent, root, stop } = await start({ BACKPLANE_SCHEDULER: "1" });
+  const { agent, root, stop } = await start();
   async function tool(name: string, args: Record<string, unknown>) {
     const result = await agent.callTool({
       name: "scheduler." + name,
@@ -51,7 +28,7 @@ test("schedules are shared by RPC and MCP, and the client queue runs a worker", 
   }
   try {
     const listed = (await agent.listTools()).tools;
-    expect(listed).toHaveLength(27);
+    expect(listed).toHaveLength(29);
     const hints = Object.fromEntries(
       listed
         .filter((t) => t.name.startsWith("scheduler."))
@@ -74,7 +51,7 @@ test("schedules are shared by RPC and MCP, and the client queue runs a worker", 
       runHistory: [true, false],
       terminate: [false, true],
     });
-    expect(await readdir(root)).toEqual(["scheduler"]);
+    expect((await readdir(root)).sort()).toEqual([OWN_APP, "scheduler"].sort());
 
     const queue = (await connectBackplane({ app: scope.app }))
       .tenant(scope.tenant)
@@ -83,7 +60,9 @@ test("schedules are shared by RPC and MCP, and the client queue runs a worker", 
       {
         id: "tick",
         ref: "ticks",
-        cron: "* * * * * *",
+        // VERIFIED from two failed runs: a run created before the edit keeps payload 7, so the schedule fires only
+        // after the edit sets payload 8 and the every-second cron.
+        cron: "0 0 1 1 *",
         handler: "rollup",
         payload: 7,
       },
@@ -117,7 +96,7 @@ test("schedules are shared by RPC and MCP, and the client queue runs a worker", 
 
     const edited = await tool("update", {
       id: "tick",
-      patch: { payload: 8 },
+      patch: { payload: 8, cron: "* * * * * *" },
       change: { revision: created.revision, requestId: "edit" },
     });
     expect(edited.isError).toBeFalsy();
@@ -229,14 +208,47 @@ test("schedules are shared by RPC and MCP, and the client queue runs a worker", 
   }
 }, 20000);
 
-test("a second scheduling daemon on the same data root fails before it listens", async () => {
-  const first = await start({ BACKPLANE_SCHEDULER: "1" });
+test("a second daemon on the same data root fails before it listens", async () => {
+  const first = await start();
   const port = process.env.PORT;
   try {
     process.env.PORT = String(await freePort());
     await expect(listen()).rejects.toMatchObject({ code: "OWNER_BUSY" });
   } finally {
     process.env.PORT = port;
+    await first.stop();
+  }
+});
+
+test("two daemons in one process serve only their own schedules and data", async () => {
+  const connect = (daemon: { url: string }, headers: { Authorization: string }) =>
+    connectBackplane({
+      app: scope.app,
+      port: Number(new URL(daemon.url).port),
+      apiKey: headers.Authorization.slice("Bearer ".length),
+    }).then((client) => client.tenant(scope.tenant));
+  const first = await start();
+  try {
+    const second = await start();
+    try {
+      const [one, two] = await Promise.all([
+        connect(first.daemon, first.headers),
+        connect(second.daemon, second.headers),
+      ]);
+      await one.scheduler(scope.bucket).create({ id: "only-first", cron: "0 0 1 1 *", handler: "build" });
+      expect(await two.scheduler(scope.bucket).get("only-first")).toBeNull();
+      await two.cache(scope.bucket).set("where", "second");
+      expect(await one.cache(scope.bucket).get("where")).toEqual({
+        hit: false,
+      });
+      expect(await two.cache(scope.bucket).get("where")).toEqual({
+        hit: true,
+        value: "second",
+      });
+    } finally {
+      await second.stop();
+    }
+  } finally {
     await first.stop();
   }
 });

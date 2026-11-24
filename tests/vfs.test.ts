@@ -60,6 +60,9 @@ test("objects round-trip with revisions, prefixes and pages in the tenant's vfs 
       component("media"),
     );
     expect((await stat(volume)).isDirectory()).toBe(true);
+    // The names read as words on disk.
+    expect(await readdir(root)).toEqual([expect.stringMatching(/^shop-[0-9a-f]{8}$/)]);
+    expect(await readdir(join(volume, ".."))).toEqual([expect.stringMatching(/^media-[0-9a-f]{8}$/)]);
   } finally {
     await service.close();
     await rm(root, { recursive: true, force: true });
@@ -180,6 +183,25 @@ test("an upload that fails midway leaves the previous object and revision", asyn
       found: true,
       ...before,
     });
+  } finally {
+    await service.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a range read fails once a write replaces the object it started on", async () => {
+  const root = await mkdtemp(join(tmpdir(), "backplane-vfs-"));
+  const service = createServices(root);
+  try {
+    const bytes = new Uint8Array(600 * 1024).map((_, i) => i % 251);
+    const first = await service.api.vfs.put(scope, "clip.bin", bytes);
+    const reader = service.transfers
+      .readRange(scope, "clip.bin", first.revision, 1000, 500 * 1024)
+      .getReader();
+    // Each pull reads one 256 KiB window, so the second read sees the replacement.
+    expect((await reader.read()).value).toEqual(bytes.subarray(1000, 1000 + 256 * 1024));
+    await service.api.vfs.put(scope, "clip.bin", bytes);
+    expect(await code(reader.read())).toBe("REVISION_CONFLICT");
   } finally {
     await service.close();
     await rm(root, { recursive: true, force: true });

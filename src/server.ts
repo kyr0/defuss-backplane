@@ -1,237 +1,208 @@
-/** VERIFIED: One listener applies the same Host, Origin and bearer checks before RPC, MCP or the file transfer route sees a request body. */
-import {
-  createServer,
-  type IncomingHttpHeaders,
-  type IncomingMessage,
-  type ServerResponse,
-} from "node:http";
+/** VERIFIED: defuss-serve owns the one loopback listener. Every endpoint is a plugin that applies the same Host and
+ * Origin checks before it reads a request body; all but the health probes also require the bot key. */
 import { createHash, timingSafeEqual } from "node:crypto";
+import { join } from "node:path";
 import { createMcpHttp } from "defuss-mcp/http";
-import { createRpcServer, rpcRoute } from "defuss-rpc/server";
+import { createRpcServer } from "defuss-rpc/server";
+import { openScheduler } from "defuss-scheduler";
+import { createServer, type ServePlugin } from "defuss-serve";
 import { createServices } from "./services.js";
 import { makeTools } from "./tools.js";
-import { capture, httpCode, observeMethods, withFaults } from "./faults.js";
-import type { WriteOptions } from "./revisions.js";
-import type { Scope } from "./scope.js";
-import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
-import type { ReadableStream as NodeReadableStream } from "node:stream/web";
-import { join } from "node:path";
-import { openScheduler } from "defuss-scheduler";
+import { observeMethods, withFaults, type Recorder } from "./faults.js";
+import { statuses, type ErrorCode } from "./errors.js";
+import { createDaemonLog, reason } from "./log.js";
+import { openOwnLog } from "./logs.js";
 import { schedulerApi } from "./scheduler.js";
-import { dataRoot, schedulerEnabled, settings } from "./config.js";
+import { createTelemetry } from "./telemetry.js";
+import { createTransfers, fault } from "./transfer.js";
+import { callbackOrigins, dataRoot, otlpEnabled, settings } from "./config.js";
+import { startCallbacks } from "./callbacks.js";
 
 const limit = 1024 * 1024;
 const digest = (value: string) => createHash("sha256").update(value).digest();
-function end(res: ServerResponse, status: number, message: string) {
-  res
-    .writeHead(status, { "content-type": "application/json" })
-    .end(JSON.stringify({ error: message, code: httpCode(status), status }));
+
+/** Reads at most 1 MiB of a request body; a larger one gets 413 before the protocol sees it. */
+async function bounded(request: Request) {
+  if (Number(request.headers.get("content-length")) > limit)
+    return fault(413, "Body exceeds 1 MiB");
+  if (!request.body) return undefined;
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  for await (const chunk of request.body) {
+    length += chunk.length;
+    if (length > limit) return fault(413, "Body exceeds 1 MiB");
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
 }
-/** Object transfers take a quoted revision in If-Match or `*` in If-None-Match, the HTTP forms of `ifRevision`. */
-function precondition(headers: IncomingHttpHeaders): WriteOptions {
-  const match = headers["if-match"],
-    none = headers["if-none-match"];
-  if (match === undefined && none === undefined) return {};
-  if (match === undefined && none === "*") return { ifRevision: null };
-  if (none === undefined && match !== undefined && /^"[^"]+"$/.test(match))
-    return { ifRevision: match.slice(1, -1) };
-  throw new TypeError(
-    "Send one quoted revision in If-Match or * in If-None-Match",
-  );
-}
-/** One daemon owns the defuss-rpc process registry. Invoked exclusively by the CLI. */
+
+/** Starts a daemon with an RPC server of its own, so daemons in one process serve only their own functions. The CLI
+ * starts one; the tests start several in turn. */
 export async function listen() {
   const config = settings();
+  const push = otlpEnabled();
+  const origins = callbackOrigins();
+  // A data root the daemon cannot write fails here, before anything listens.
+  const ownLog = await openOwnLog(dataRoot());
+  const log = createDaemonLog(ownLog);
+  const telemetry = createTelemetry({ root: dataRoot(), push, warn: log.warn });
   const credential = digest("Bearer " + config.apiKey);
-  // App directories start with `x` (see scope.ts), so none can be named `scheduler`. The scheduler's file lock makes a
+  /** Times each call, and gives a server-side fault a line in the daemon's log with the error the method threw. BUSY
+   * only means a full pool or queue, which the metrics count; a line per rejected call would flood the log. */
+  const meter = (module: string): Recorder => {
+    const timed = telemetry.meter(module);
+    return (method, scope, code, seconds, thrown) => {
+      timed(method, scope, code, seconds);
+      if (code !== "BUSY" && statuses[code as ErrorCode] >= 500)
+        log.error(`call failed module=${module} method=${method} code=${code} error="${reason(thrown)}"`);
+    };
+  };
+  // App directories end with `-` and 8 hex digits (see scope.ts), so none can be named `scheduler` or `_backplane`. The scheduler's file lock makes a
   // second daemon on the same data root fail here, before it registers or listens.
-  const scheduler = schedulerEnabled()
-    ? await openScheduler({ directory: join(dataRoot(), "scheduler") })
-    : undefined;
-  const services = createServices(dataRoot());
-  createRpcServer({
+  let scheduler;
+  try {
+    scheduler = await openScheduler({
+      directory: join(dataRoot(), "scheduler"),
+      onError(error) {
+        telemetry.schedulerFault();
+        log.error('scheduler fault error="' + reason(error) + '"');
+      },
+    });
+  } catch (error) {
+    await telemetry.obs.shutdown();
+    await log.close();
+    throw error;
+  }
+  const services = createServices(dataRoot(), meter, ownLog);
+  const rpc = createRpcServer({
     ...services.api,
-    ...(scheduler && { scheduler: observeMethods(schedulerApi(scheduler)) }),
+    scheduler: observeMethods(schedulerApi(scheduler, origins), meter("scheduler")),
   });
-  const mcp = createMcpHttp(makeTools(!!scheduler), {
+  const mcp = createMcpHttp(makeTools(rpc), {
     mode: "json",
     maxBodyBytes: limit,
     allowedOrigins: [],
+  });
+  const transfers = createTransfers(services, (route, code, thrown) => {
+    if (code !== "BUSY" && statuses[code] >= 500)
+      log.error(`transfer failed route=${route} code=${code} error="${reason(thrown)}"`);
   });
   const accepted = new Set([
     "127.0.0.1:" + config.port,
     "localhost:" + config.port,
   ]);
-  /** Streams one VFS object in either direction without the 1 MiB body limit. The query names the scope and key, and
-   * faults use the `/rpc` error body. */
-  async function transfer(
-    req: IncomingMessage,
-    res: ServerResponse,
-    query: URLSearchParams,
-  ) {
-    if (req.method !== "GET" && req.method !== "PUT") {
-      res.setHeader("Allow", "GET, PUT");
-      return end(res, 405, "GET or PUT required");
-    }
-    const scope = {
-      app: query.get("app"),
-      tenant: query.get("tenant"),
-      bucket: query.get("bucket"),
-    } as Scope;
-    const key = query.get("key") as string;
-    const abort = new AbortController();
-    res.once("close", () => abort.abort());
-    try {
-      if (req.method === "PUT") {
-        const stored = await services.transfers.upload(
-          scope,
-          key,
-          req,
-          precondition(req.headers),
-          abort.signal,
-        );
-        res
-          .writeHead(200, {
-            "content-type": "application/json",
-            etag: '"' + stored.revision + '"',
-          })
-          .end(JSON.stringify(stored));
-        return;
-      }
-      const read = await services.transfers.download(scope, key);
-      if (!read.found) return end(res, 404, "No object at this key");
-      res.writeHead(200, {
-        "content-type": "application/octet-stream",
-        "content-length": read.size,
-        etag: '"' + read.revision + '"',
-        "x-mtime-ms": read.mtimeMs,
-      });
-      // Destroying the Node stream cancels the web stream, which releases the volume lease.
-      await pipeline(
-        Readable.fromWeb(read.stream as unknown as NodeReadableStream<Uint8Array>),
-        res,
-      );
-    } catch (error) {
-      if (res.headersSent) return void res.destroy();
-      const fault = capture(error);
-      // An upload rejected before its body was read leaves the connection unusable.
-      res.setHeader("connection", "close");
-      res
-        .writeHead(fault.status, { "content-type": "application/json" })
-        .end(
-          JSON.stringify({
-            code: fault.code,
-            error: fault.message,
-            status: fault.status,
+  type Endpoint = (request: Request) => Response | Promise<Response>;
+  /** Wraps an endpoint in the Host and Origin checks. defuss-serve already limits Host names, but not the port or
+   * Origin, so a page in a browser cannot read even the probes through DNS rebinding. */
+  function local(name: string, routes: ServePlugin["routes"], endpoint: Endpoint): ServePlugin {
+    return {
+      name,
+      routes,
+      fetch: (request) =>
+        !accepted.has(request.headers.get("host") ?? "") || request.headers.has("origin")
+          ? fault(403, "Forbidden origin or host")
+          : endpoint(request),
+    };
+  }
+  /** Adds the bot key check. The routes declare no methods, so an unauthenticated request gets 401 rather than 405
+   * and learns nothing about them. */
+  function guarded(name: string, routes: ServePlugin["routes"], endpoint: Endpoint) {
+    return local(name, routes, (request) =>
+      timingSafeEqual(credential, digest(request.headers.get("authorization") ?? ""))
+        ? endpoint(request)
+        : fault(401, "Bot key required", {
+            "WWW-Authenticate": 'Bearer realm="defuss-backplane"',
           }),
-        );
-    }
-  }
-  async function handle(req: IncomingMessage, res: ServerResponse) {
-    if (
-      !accepted.has(req.headers.host ?? "") ||
-      req.headers.origin !== undefined
-    )
-      return end(res, 403, "Forbidden origin or host");
-    if (!timingSafeEqual(credential, digest(req.headers.authorization ?? ""))) {
-      res.setHeader("WWW-Authenticate", 'Bearer realm="defuss-backplane"');
-      return end(res, 401, "Bot key required");
-    }
-    const target = new URL(req.url ?? "/", config.base);
-    if (target.pathname === "/vfs/object")
-      return transfer(req, res, target.searchParams);
-    const isMcp = req.url === "/mcp";
-    if (!isMcp && req.url !== "/rpc/schema" && req.url !== "/rpc")
-      return end(res, 404, "Unknown endpoint");
-    if (!isMcp && req.method !== "POST") {
-      res.setHeader("Allow", "POST");
-      return end(res, 405, "POST required");
-    }
-    if (Number(req.headers["content-length"]) > limit)
-      return end(res, 413, "Body exceeds 1 MiB");
-    let length = 0;
-    const chunks: Buffer[] = [];
-    for await (const chunk of req.iterator({ destroyOnReturn: false })) {
-      length += chunk.length;
-      if (length > limit) {
-        req.resume();
-        return end(res, 413, "Body exceeds 1 MiB");
-      }
-      chunks.push(chunk);
-    }
-    const headers = new Headers();
-    for (let i = 0; i < req.rawHeaders.length; i += 2)
-      headers.append(req.rawHeaders[i], req.rawHeaders[i + 1]);
-    if (!isMcp) headers.set("Content-Type", "application/json");
-    const abort = new AbortController();
-    res.once("close", () => abort.abort());
-    const request = new Request(config.base + req.url, {
-      method: req.method,
-      headers,
-      signal: abort.signal,
-      body:
-        req.method === "GET" || req.method === "HEAD"
-          ? undefined
-          : Buffer.concat(chunks),
-    });
-    const response = await withFaults(isMcp, () =>
-      isMcp ? mcp.fetch(request) : rpcRoute({ request }),
     );
-    res.writeHead(response.status, Object.fromEntries(response.headers));
-    if (response.body) await pipeline(response.body, res);
-    else res.end();
   }
-  const active = new Set<Promise<void>>();
-  const server = createServer((req, res) => {
-    const task = handle(req, res).catch(() => {
-      if (!res.headersSent && !res.destroyed) end(res, 500, "Request failed");
-      else res.destroy();
+  /** RPC and MCP calls carry at most 1 MiB, buffered here so both protocols reject larger bodies alike. */
+  async function call(request: Request, isMcp: boolean) {
+    if (!isMcp && request.method !== "POST")
+      return fault(405, "POST required", { Allow: "POST" });
+    const body = await bounded(request);
+    if (body instanceof Response) return body;
+    const headers = new Headers(request.headers);
+    if (!isMcp) headers.set("Content-Type", "application/json");
+    const forwarded = new Request(request.url, {
+      method: request.method,
+      headers,
+      signal: request.signal,
+      body,
     });
-    active.add(task);
-    void task.finally(() => active.delete(task));
+    return withFaults(isMcp, () => (isMcp ? mcp.fetch(forwarded) : rpc.fetch(forwarded)));
+  }
+  const server = createServer({
+    host: "127.0.0.1",
+    port: config.port,
+    plugins: [
+      guarded("rpc", [{ path: "/rpc" }, { path: "/rpc/schema" }], (r) => call(r, false)),
+      guarded("mcp", [{ path: "/mcp" }], (r) => call(r, true)),
+      guarded("vfs-object", [{ path: "/vfs/object" }], transfers.object),
+      guarded("files", [{ path: "/files", prefix: true }], transfers.files),
+      // A supervisor polls the probes without the key. They report only pass or fail per check; /metrics names apps.
+      local("probes", ["/health", "/healthz", "/livez", "/readyz"].map((path) => ({ path })), telemetry.obs.fetch),
+      guarded("metrics", [{ path: "/metrics" }], telemetry.obs.fetch),
+    ],
+    // Uploads have no size or time limit, so long transfers can finish. RPC and MCP bodies stop at 1 MiB above.
+    maxBodyBytes: Number.MAX_SAFE_INTEGER,
+    bodyTimeoutMs: 0,
+    headersTimeoutMs: 15_000,
+    // Requests get 3 seconds to finish, below the 5 seconds `make stop` allows before SIGKILL. VERIFIED by probe: a
+    // client that stops reading a download keeps its connection open, so without this cut-off it blocks shutdown.
+    shutdownTimeoutMs: 3000,
+    onRequest: telemetry.request,
+    // Diagnostics carry a code and a plugin name only, never request data.
+    onDiagnostic: (event) =>
+      log.warn("serve " + event.code + (event.plugin ? " plugin=" + event.plugin : "")),
   });
-  // An upload or download may outlast any fixed request deadline. Shutdown bounds open transfers instead.
-  server.requestTimeout = 0;
-  server.headersTimeout = 15_000;
+  const release = () =>
+    Promise.all([
+      rpc.close(),
+      mcp.close(),
+      services.close(),
+      scheduler?.close(),
+      telemetry.obs.shutdown(),
+    ]).finally(() => log.close());
   try {
-    await new Promise<void>((resolve, reject) => {
-      server.once("error", reject);
-      server.listen(config.port, "127.0.0.1", () => {
-        server.off("error", reject);
-        resolve();
-      });
-    });
+    await server.start();
   } catch (error) {
-    await Promise.all([services.close(), scheduler?.close()]);
-    createRpcServer({});
+    await release();
     throw error;
   }
-  const socket = server.address();
-  if (!socket || typeof socket === "string" || socket.address !== "127.0.0.1") {
-    server.close();
+  if (server.url?.hostname !== "127.0.0.1") {
+    await server.stop();
+    await release();
     throw new Error("Unexpected listener address");
   }
+  telemetry.watch(() => server.stats, services.handles);
+  // Callbacks start once the daemon listens, so no failed startup has calls in flight.
+  const callbacks = startCallbacks(scheduler, {
+    apiKey: config.apiKey,
+    origins,
+    warn: log.warn,
+    record: telemetry.callback,
+  });
   return {
-    url: "http://" + socket.address + ":" + socket.port,
+    url: "http://127.0.0.1:" + server.port,
+    log,
     async close() {
-      const closed = new Promise<void>((resolve, reject) =>
-        server.close((err) => (err ? reject(err) : resolve())),
-      );
-      // Requests get 3 seconds to finish, below the 5 seconds `make stop` allows before SIGKILL. VERIFIED by probe: a
-      // client that stops reading a download keeps its connection open, so without this cut-off it blocks shutdown.
-      // Closing the connection aborts an unfinished upload, which keeps the previous object.
-      const cutoff = setTimeout(() => server.closeAllConnections(), 3000);
+      // Readiness fails before the listener closes. Closing a connection aborts an unfinished upload, which keeps the
+      // previous object. The final OTLP export runs after the requests drain and before the stores close. The log
+      // closes last, so a fault while closing still gets its line. Callbacks in flight get 2.5 s while requests drain.
+      log.info("stopping");
+      telemetry.obs.drain();
+      await Promise.all([server.stop(), callbacks.close()]);
       try {
-        await closed;
+        await telemetry.obs.shutdown();
       } finally {
-        clearTimeout(cutoff);
+        try {
+          await mcp.close();
+          await rpc.close();
+          await Promise.all([services.close(), scheduler.close()]);
+        } finally {
+          await log.close();
+        }
       }
-      await Promise.allSettled(active);
-      await mcp.close();
-      await Promise.all([services.close(), scheduler?.close()]);
-      // The registry is process-wide and keeps its first registration, so a later daemon in this process needs it empty.
-      createRpcServer({});
     },
   };
 }

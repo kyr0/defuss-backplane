@@ -1,6 +1,6 @@
 # defuss-backplane
 
-Local, unified low-level persistence and logic layer RPC service for application service backend and MCP agents. One process serves defuss-rpc, MCP and a streaming file endpoint on the same port. Each bucket belongs to one app, tenant and service.
+Local, unified low-level persistence and logic layer RPC service for application service backend and MCP agents. One process serves defuss-rpc, MCP, streaming file routes, health probes and metrics on the same port through defuss-serve. Each bucket belongs to one app, tenant and service.
 
 ## Quick start
 
@@ -12,7 +12,7 @@ npm install ./defuss-backplane-0.3.0.tgz
 bun add ./defuss-backplane-0.3.0.tgz
 ```
 
-The release bundles the defuss-db engine code reached by the daemon. npm or bun installs defuss-vfs, the file engine, and defuss-scheduler 0.1.0 as regular dependencies. Installing the tarball avoids the model runtimes in the development dependency tree.
+The release bundles the defuss-db engine code reached by the daemon. npm or bun installs defuss-vfs, the file engine, defuss-logs 0.3.0, defuss-scheduler 0.2.0 and the other runtime packages as regular dependencies. Installing the tarball avoids the model runtimes in the development dependency tree.
 
 In the directory where the daemon will run, create a private bot key once. Skip this command if you already have a configured `.env`.
 
@@ -82,9 +82,38 @@ await cache.set("job-7", { state: "claimed" }, { ttlMs: 30_000, ifRevision: null
 
 Omitting `ifRevision` keeps the v0.1 write behavior. A null token requires logical absence, including an expired cache key. An insert accepts null or an omitted condition and always creates a new row. An update of an absent row returns false if its precondition passes. Recreating a deleted item issues a fresh token even for identical contents. A token applies to one item, survives daemon restarts, and remains valid across writes to other items. Route all edits through the daemon when using revisions. Native readers can still open the document store. A typed collection requires an explicit ID when its declared ID type excludes arbitrary strings.
 
+## Logs
+
+Each app has a log, and each of its tenants has one more. `client.logs()` writes and reads the app's log, and `client.tenant(name).logs()` that tenant's. defuss-logs 0.3.0 stores the records, and DSON keeps the types of their arguments.
+
+```ts
+import { createBatchSink, createLogger } from "defuss-logs/client";
+
+const backplane = await connectBackplane({ app: "shop" });
+const acme = backplane.tenant("acme").logs();
+const logger = createLogger({ sink: createBatchSink(acme), parallelSink: true, context: { service: "checkout" } });
+logger.console.warn("payment %s declined", paymentId, { amount: 12n, at: new Date() });
+await logger.flush();
+
+const { records, nextAfter } = await acme.read({ levels: ["warn", "error"], limit: 50 });
+```
+
+The handle is a defuss-logs batch writer. A logger in the application formats, redacts and batches its records, and each batch becomes one RPC call of at most 256 KiB of encoded records, which keeps it below the 1 MiB request limit. Install defuss-logs in the application to import `createLogger`.
+
+| Operation | Result |
+| --- | --- |
+| `logs.write(entries)` | Appends 1 to 1,000 entries in one transaction and returns `{written}`. An entry needs `level` (`trace`, `debug`, `info`, `warn`, `error` or `fatal`) and `message`. It may carry `args`, `context`, a `ts` Date and an `id`. The daemon assigns a missing `id` and `ts`. An entry that repeats a stored `ts` and `id` fails the whole call with `ALREADY_EXISTS`. |
+| `logs.read(request?)` | Returns `{records,nextAfter}` in time order. `from` is inclusive and `before` exclusive. `levels` filters, and `limit` defaults to 100 with a maximum of 1,000. Pass `nextAfter` as `after` for the next page. |
+
+Records of the same millisecond come back in the order of their IDs, not of their writes. The MCP tools `logs.write` and `logs.read` take a scope of `app` and an optional `tenant`. Over MCP the daemon stamps each entry, and timestamps travel as ISO-8601 strings. Reading a record whose arguments hold dates, binary or bigint values needs `resultEncoding: "dson"`. The daemon neither rotates nor expires logs, so a log grows until its directory is deleted.
+
+### Reserved app names
+
+App names starting with `_` belong to the defuss libraries, so any call that uses one fails with `INVALID_ARGUMENT`, with one exception for reading. The daemon writes its own lines to the app log of `_backplane`: startup, shutdown, listener diagnostics, scheduler faults, failed OTLP exports, and calls or transfers that fail with a server error other than `BUSY`. It also prints each line to stdout, or stderr for warnings and errors. Any caller with the bot key can read that log with `logs.read` and the scope `{app: "_backplane"}`, for example `connectBackplane({ app: "_backplane" })` followed by `.logs().read()`, so agents and people can debug the daemon. Writing it fails with `INVALID_ARGUMENT`, and it has no tenant logs. After the daemon stops, defuss-logs also reads it from `_backplane/logs` under the data root. A daemon that fails to start prints the error to stderr only. defuss-rpc and defuss-mcp print their own lines to the console, which reach stdout and stderr but not the log.
+
 ## Scheduling
 
-Start the daemon with `BACKPLANE_SCHEDULER=1` to add durable cron schedules from defuss-scheduler 0.1.0. `tenant.scheduler(bucket)` returns a defuss-scheduler queue, so its `startWorker` can run handlers against the daemon. Against a daemon started without the setting, every queue call rejects with `Method missing from server schema`.
+Every daemon runs one defuss-scheduler 0.2.0 authority for all apps, tenants and buckets. `tenant.scheduler(bucket)` returns a defuss-scheduler queue. An app either lets the daemon call one of its RPC functions at each occurrence, as described under RPC callbacks, or runs `startWorker` against the queue.
 
 ```ts
 import { startWorker } from "defuss-scheduler/worker";
@@ -109,7 +138,25 @@ process.once("SIGTERM", () => void worker.stop());
 | `terminate` | RPC and MCP | Stop one run, one schedule, every schedule with a ref or the whole bucket at once, and record the cause on each. |
 | `claim`, `renew`, `complete`, `fail` | RPC only | Lease runs and report on them. `startWorker` calls these. |
 
-Edits take `change: { revision, requestId }`. A stale revision fails with `REVISION_CONFLICT`, an ID already in use with `ALREADY_EXISTS`, and an edit of an unknown schedule with `NOT_FOUND`. After an ambiguous response, repeat the call with the same request ID and arguments. Payloads and results are JSON. The defuss-scheduler documentation covers cron syntax, time zones, retries and worker shutdown. Install defuss-scheduler 0.1.0 in the worker's application to import `startWorker`.
+Edits take `change: { revision, requestId }`. A stale revision fails with `REVISION_CONFLICT`, an ID already in use with `ALREADY_EXISTS`, and an edit of an unknown schedule with `NOT_FOUND`. After an ambiguous response, repeat the call with the same request ID and arguments. Payloads and results are JSON. The defuss-scheduler documentation covers cron syntax, time zones, retries and worker shutdown. Install defuss-scheduler 0.2.0 in the worker's application to import `startWorker`. Handler names starting with `_` belong to the daemon: a schedule cannot use one other than `_rpc`, and a worker cannot claim them.
+
+### RPC callbacks
+
+A schedule with handler `_rpc` needs no worker and no cron of the app's own. At each occurrence the daemon calls the defuss-rpc function that the payload names, with the payload's arguments.
+
+```ts
+await tenant.scheduler("jobs").create({
+  id: "nightly-report",
+  cron: "0 2 * * *",
+  timezone: "Europe/Berlin",
+  handler: "_rpc",
+  payload: { url: "http://127.0.0.1:3000/rpc", className: "ReportApi", methodName: "nightly", args: [{ days: 1 }] },
+});
+```
+
+The daemon sends a defuss-rpc request: `POST` to `url` with the DSON body `{className, methodName, args}`. Its headers are `Authorization: Bearer <API_KEY>`, `X-Backplane-Schedule`, `X-Backplane-Run` and `X-Backplane-Attempt`. The app compares the bearer token with its own bot key. Delivery is at least once, so the app should drop a run ID it has already handled. The run stores `{status, result}`, where `result` is the function's return value when it is JSON and null otherwise.
+
+`url` must use http or https on `127.0.0.1`, `localhost` or `[::1]`, or an origin listed in `BACKPLANE_CALLBACK_ORIGINS`, because the daemon sends its bot key along. A payload that breaks these rules fails `create` or `update` with `INVALID_ARGUMENT`. A call fails after 60 seconds or on a redirect. An answer with status 2xx completes the run. A 4xx answer other than 408 and 429 fails it for good. Other failures retry within the schedule's retry policy. Each failed call logs a WARN line to the `_backplane` log. The daemon checks for due callbacks every 250 ms.
 
 ## Files
 
@@ -148,6 +195,25 @@ curl -fsS -T intro.mp4 -H "Authorization: Bearer ${API_KEY}" "$object"
 curl -fsS -o copy.mp4 -H "Authorization: Bearer ${API_KEY}" "$object"
 ```
 
+### Files over plain HTTP
+
+`GET` and `HEAD` on `/files/<app>/<tenant>/<bucket>/<key>` read an object with standard HTTP, so curl, a fetch call or a proxy in front of a media player can stream and seek. Percent-encode each path segment; the slashes of the key stay as they are. The route needs the same bot key as every other route, so a browser reaches it only through the application backend, which checks its own user and forwards the request with the key.
+
+```sh
+curl -fsS -r 0-1048575 -H "Authorization: Bearer ${API_KEY}" \
+  -o head.mp4 http://127.0.0.1:43127/files/shop/acme/media/videos/intro.mp4
+```
+
+| Request header | Answer |
+| --- | --- |
+| none | 200 with the whole object, `ETag`, `Last-Modified`, `Accept-Ranges: bytes` and `Cache-Control: private, no-cache`. |
+| `Range: bytes=<first>-<last>`, `bytes=<first>-` or `bytes=-<suffix>` | 206 with `Content-Range`. A range past the end returns 416 with `Content-Range: bytes */<size>`. Several ranges in one header get the whole object. |
+| `If-Range: "<revision>"` | The range when the revision still matches, else the whole object. A date there always gets the whole object. |
+| `If-None-Match` or `If-Modified-Since` | 304 without a body when the object is unchanged. |
+| `If-Match` or `If-Unmodified-Since` | 412 when the object changed. |
+
+`Content-Type` follows the key's extension for common image, audio, video, PDF, text, CSV and JSON files. Every other file is sent as `application/octet-stream` with `X-Content-Type-Options: nosniff`, so HTML, SVG and scripts that a tenant stored cannot run on the site that proxies them. `X-Size` repeats the object size, because Bun sends streamed bodies without `Content-Length`. A missing object returns 404 with code `NOT_FOUND`. An app, tenant or bucket whose name contains `/` is reachable only through RPC, because the listener rejects an encoded slash in a path.
+
 ### Errors
 
 RPC error bodies carry `{code,error,status}`. The SDK throws `BackplaneError` with `code`, `message`, and `status`. MCP tool failures set `isError` and carry `{code,message,status}` in `structuredContent`. MCP transport and JSON-RPC protocol failures use their protocol-defined envelopes.
@@ -157,9 +223,9 @@ RPC error bodies carry `{code,error,status}`. The SDK throws `BackplaneError` wi
 | INVALID_ARGUMENT | 400 | Correct the arguments. |
 | UNAUTHORIZED | 401 | Send the bot key as a bearer token. |
 | FORBIDDEN | 403 | Use the loopback URL and port, and send no Origin header. |
-| NOT_FOUND | 404 | Check the endpoint path. A download of a missing object or an edit of an unknown schedule also returns this code. |
+| NOT_FOUND | 404 | Check the endpoint path. A download of a missing object, through either file route, or an edit of an unknown schedule also returns this code. |
 | METHOD_NOT_ALLOWED | 405 | Use the method named in the `Allow` header. |
-| ALREADY_EXISTS | 409 | Choose a different ID or edit the existing row or schedule. |
+| ALREADY_EXISTS | 409 | Choose a different ID or edit the existing row or schedule. A log batch that fails this way was already stored. |
 | REVISION_CONFLICT | 409 | Read the current version before deciding whether to retry. |
 | PAYLOAD_TOO_LARGE | 413 | Keep `/rpc` and `/mcp` requests under 1 MiB. Stream larger files through `/vfs/object`. |
 | BUSY | 503 | Retry with backoff. Repeat a scheduler call with the same request ID and arguments. |
@@ -178,13 +244,44 @@ curl -fsS -H "Authorization: Bearer ${API_KEY}" http://127.0.0.1:43127/rpc \
   --json '{"className":"cache","methodName":"set","args":[{"app":"shop","tenant":"acme","bucket":"catalog"},"currency","EUR"]}'
 ```
 
-Configure the agent's Streamable HTTP transport with endpoint `http://127.0.0.1:43127/mcp` and the same Authorization header. Tool discovery lists the ten cache and document operations and `vfs.put`, `vfs.get`, `vfs.head`, `vfs.list` and `vfs.delete`, each with its input schema. With scheduling on, it also lists the twelve `scheduler.` management tools. For example, call `cache.get` with these arguments.
+Configure the agent's Streamable HTTP transport with endpoint `http://127.0.0.1:43127/mcp` and the same Authorization header. Tool discovery lists the ten cache and document operations, `vfs.put`, `vfs.get`, `vfs.head`, `vfs.list` and `vfs.delete`, and `logs.write` and `logs.read`, and the twelve `scheduler.` management tools, each with its input schema. For example, call `cache.get` with these arguments.
 
 ```json
 {"scope":{"app":"shop","tenant":"acme","bucket":"catalog"},"key":"currency"}
 ```
 
 The result is available as `structuredContent.value`. A native value that would lose information in JSON requires `resultEncoding: "dson"` on the read. The value then contains a `dson` string. Shared references, cycles, dates, binary and bigint values can require this mode. MCP keyed document operations accept a string, number, or a tagged bigint such as `{"bigint":"9007199254740993"}`. The tag is also accepted as `document.id` on insert, which returns the tag for a bigint ID. Reading such a document with `resultEncoding: "dson"` preserves the native ID. Conditional MCP writes take `ifRevision` at the top level alongside `scope` and `key` or `id`. Ordinary MCP writes accept JSON. RPC supports DSON for reads and writes. The VFS tools exchange object content as a string: `encoding` selects `utf8`, the default, or `base64` for binary. A `utf8` read of bytes that are not valid UTF-8 fails with `INVALID_ARGUMENT`.
+
+## Health and metrics
+
+defuss-o11y 0.3.0 reports the daemon's health and every call it serves. A supervisor on the same host polls the probes without the bot key. The scrape needs the key because it names apps. All of these routes reject a foreign Host or any Origin with 403, like the other routes.
+
+```sh
+curl -fsS http://127.0.0.1:43127/readyz
+curl -fsS -H "Authorization: Bearer ${API_KEY}" http://127.0.0.1:43127/metrics
+```
+
+| Path | Bot key | Answer |
+| --- | --- | --- |
+| `/readyz`, `/health` | not needed | 200 when every check passes, else 503. The `storage` check needs write access and free space on the data root's volume. |
+| `/livez`, `/healthz` | not needed | 200 while the process answers. |
+| `/metrics` | required | Prometheus text format 0.0.4. |
+
+A probe returns `{"service":"defuss-backplane","status":"pass","checks":[{"name":"storage","status":"pass"}]}`. A failed check reports only its name and a reason code, never the error.
+
+| Prometheus name | Kind | Labels | Measures |
+| --- | --- | --- | --- |
+| `backplane_operation_duration` | histogram, seconds | `module` (cache, db, vfs, logs or scheduler), `method`, `app`, `code` (`OK` or an error code) | Each service call over RPC and MCP. `_count` gives calls and faults per app. |
+| `http_server_request_duration` | histogram, seconds | `endpoint` (rpc, mcp, vfs-object, files, probes, metrics, or `http` for the listener's own 403 and 404), `http_request_method`, `http_response_status_code` | Time until the response headers, so a streamed body's transfer time is not included. |
+| `backplane_storage_free` | gauge, bytes | none | Space available on the data root's volume. |
+| `backplane_store_handles` | gauge | `module` (cache, db, vfs or logs), `state` (busy or idle) | Open store handles. A module keeps at most 32 and answers `BUSY` beyond that. |
+| `backplane_http_active` | gauge | `kind` (requests, streams or uploads) | Requests in progress, response bodies streaming and request bodies arriving. |
+| `backplane_callback_duration` | histogram, seconds | `app`, `outcome` (`ok`, `failed` or `rejected`) | Each RPC callback. A failed call is retried, a rejected one is not. |
+| `backplane_scheduler_errors_total` | counter | none | Faults of the scheduler's background loop, each also logged as an ERROR line. |
+
+defuss-o11y adds process uptime, resident memory, readiness, and success per check and per gauge callback. An unknown HTTP method is counted as `_OTHER`, and a call whose scope is invalid has no `app` label. Tenant, bucket and key names never appear in a label. OTLP keeps the dotted names, such as `backplane.operation.duration`. Prometheus output carries the unit in a `# UNIT` line instead of a name suffix.
+
+The listener stays on 127.0.0.1, so a Prometheus server on another host cannot scrape it. Run a Collector on the same host to scrape `/metrics`, or start the daemon with `BACKPLANE_OTLP=1` to push OTLP/HTTP JSON every 60 seconds and once at shutdown. The OpenTelemetry SDK reads the target from `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`, default `http://localhost:4318/v1/metrics`. defuss-o11y documents `OTEL_EXPORTER_OTLP_METRICS_HEADERS` for a receiver that needs credentials. An export that takes longer than 1.5 seconds fails and logs a WARN line, so the final export cannot hold up a stop.
 
 ## Configuration
 
@@ -193,9 +290,11 @@ The result is available as `structuredContent.value`. A native value that would 
 | `API_KEY` | Required bot key. Use printable ASCII without whitespace. Every holder may access every tenant. |
 | `PORT` | Listener port, default 43127. The host is fixed. |
 | `BACKPLANE_DATA_DIR` | Data root, default `./var/data` relative to the daemon working directory. |
-| `BACKPLANE_SCHEDULER` | `1` opens the scheduler in the `scheduler` directory of the data root. Default `0`. Any other value stops startup. |
+| `BACKPLANE_CALLBACK_ORIGINS` | Comma-separated origins besides loopback, such as `https://app.internal:8443`, that RPC callbacks may call. An entry that is not exactly an origin stops startup. |
+| `BACKPLANE_OTLP` | `1` pushes metrics over OTLP/HTTP. Default `0`. Any other value stops startup. |
+| `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` | The full OTLP metrics URL when `BACKPLANE_OTLP=1`. |
 
-App, tenant and bucket identifiers accept 1 to 48 valid UTF-8 bytes. Cache keys and file keys accept 1 to 1,024 valid UTF-8 bytes. Stop the service with SIGTERM or SIGINT. To back up the whole service, stop writers, shut down the daemon, then copy the data root. An application's own authentication determines which tenant it passes to the service.
+App, tenant and bucket identifiers accept 1 to 48 valid UTF-8 bytes, and an app name must not start with `_`. Each appears on disk as a lowercase slug in its own script, `-` and 8 hex digits of its hash, such as `acme-gmbh-033aedd8` for `Acme GmbH`. Cache keys and file keys accept 1 to 1,024 valid UTF-8 bytes. Stop the service with SIGTERM or SIGINT. To back up the whole service, stop writers, shut down the daemon, then copy the data root. An application's own authentication determines which tenant it passes to the service.
 
 ## Development
 

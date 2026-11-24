@@ -41,6 +41,12 @@ function normalize(error: unknown) {
       "ALREADY_EXISTS",
       "The document ID already exists",
     );
+  // defuss-logs rejects a record whose timestamp and ID are already stored, so a retried batch fails as a whole.
+  if (code === "DUPLICATE")
+    return new BackplaneError(
+      "ALREADY_EXISTS",
+      "A log record with this timestamp and ID already exists",
+    );
   // defuss-vfs reports a failed ifMatch as PRECONDITION_FAILED and a failed ifAbsent as EEXIST.
   if (code === "CONFLICT" || code === "PRECONDITION_FAILED" || code === "EEXIST")
     return new BackplaneError(
@@ -77,15 +83,33 @@ function normalize(error: unknown) {
   return new BackplaneError("STORAGE_ERROR", "Storage operation failed");
 }
 
-export function observeMethods<T extends object>(methods: T) {
+/** Reports one finished call: the method, its first argument (the scope), `OK` or the fault code, the seconds, and for
+ * a fault the value the method threw, before it was reduced to a code. */
+export type Recorder = (
+  method: string,
+  scope: unknown,
+  code: string,
+  seconds: number,
+  thrown?: unknown,
+) => void;
+
+export function observeMethods<T extends object>(methods: T, record?: Recorder) {
   return Object.fromEntries(
     Object.entries(methods).map(([name, fn]) => [
       name,
       async (...args: unknown[]) => {
+        const started = performance.now();
+        let code = "OK",
+          thrown: unknown;
         try {
           return await fn(...args);
         } catch (error) {
-          throw capture(error);
+          const fault = capture(error);
+          code = fault.code;
+          thrown = error;
+          throw fault;
+        } finally {
+          record?.(name, args[0], code, (performance.now() - started) / 1000, thrown);
         }
       },
     ]),

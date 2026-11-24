@@ -1,6 +1,7 @@
 /** VERIFIED: Reusing one disk root across fresh processes checks both restart durability and interchange between runtimes. */
 import { openDatabase } from "defuss-db";
 import { createFileBackend } from "defuss-dbsonl/server";
+import { openFileLogStore } from "defuss-logs/server";
 import assert from "node:assert/strict";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
@@ -11,7 +12,6 @@ import {
   writeFile,
   rm,
   copyFile,
-  cp,
   realpath,
 } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -50,7 +50,7 @@ const env = {
   BACKPLANE_DATA_DIR: join(tmp, "data"),
 };
 const daemonEnv: NodeJS.ProcessEnv = { ...env };
-for (const k of ["API_KEY", "PORT", "BACKPLANE_DATA_DIR", "BACKPLANE_SCHEDULER"])
+for (const k of ["API_KEY", "PORT", "BACKPLANE_DATA_DIR", "BACKPLANE_CALLBACK_ORIGINS"])
   delete daemonEnv[k];
 const observed: Record<string, unknown>[] = [];
 /** Matches the rejection of a promisified execFile that exited with `code` and printed `stderr`. */
@@ -68,7 +68,8 @@ async function exitCode(child: ChildProcess): Promise<number | null> {
 }
 /** Starts one daemon under `runtime` on the shared data root, then runs the consumer under the same runtime and its
  * peer. VERIFIED: one daemon per phase on one disk root checks restart durability and cross-runtime reads together.
- * A scheduling phase enables the scheduler and runs only its consumer, under the peer runtime. */
+ * A scheduling phase runs only the scheduler consumer, under the peer runtime. */
+let daemons = 0;
 async function runPhase(
   runtime: string,
   phase: string,
@@ -78,7 +79,7 @@ async function runPhase(
   const peer = runtime === "bun" ? "node" : "bun";
   const child = spawn(runtime, [cli], {
     cwd: tmp,
-    env: scheduling ? { ...daemonEnv, BACKPLANE_SCHEDULER: "1" } : daemonEnv,
+    env: daemonEnv,
     stdio: ["ignore", "pipe", "pipe"],
   });
   let log = "";
@@ -91,6 +92,7 @@ async function runPhase(
       await pause(40);
     }
     assert.ok(log.includes("INFO listening http://127.0.0.1:" + port));
+    daemons++;
     const url = "http://127.0.0.1:" + port;
     const schema = await exec("curl", [
       "-fsS",
@@ -103,9 +105,7 @@ async function runPhase(
     const modules: { moduleName: string }[] = JSON.parse(schema.stdout);
     assert.deepEqual(
       modules.map((item) => item.moduleName).sort(),
-      scheduling
-        ? ["cache", "db", "scheduler", "vfs"]
-        : ["cache", "db", "vfs"],
+      ["cache", "db", "logs", "scheduler", "vfs"],
     );
     if (scheduling) {
       const { stdout } = await exec(peer, ["consumer-scheduler.ts", phase], {
@@ -164,9 +164,38 @@ async function runPhase(
       object,
     ]);
     assert.deepEqual(await readFile(received), await readFile(sent));
+    // The files route serves the same object over plain HTTP: curl asks for one byte range, as a seeking player does.
+    const ranged = await exec("curl", [
+      "-fsS",
+      "-D",
+      "-",
+      "-o",
+      received,
+      "-r",
+      "1048570-1048585",
+      "-H",
+      "Authorization: Bearer " + bot,
+      url + "/files/curl/local/files/uploads/" + phase + ".bin",
+    ]);
+    assert.match(ranged.stdout, /^HTTP\/1\.1 206/);
+    assert.match(ranged.stdout, /content-range: bytes 1048570-1048585\/1572864/i);
+    assert.deepEqual(
+      await readFile(received),
+      (await readFile(sent)).subarray(1048570, 1048586),
+    );
     assert.equal((await fetch(url + "/mcp", { method: "POST" })).status, 401);
+    // A supervisor polls the probes without the key; the scrape needs it and counts the curl calls above.
+    for (const probe of ["/health", "/healthz", "/livez", "/readyz"])
+      assert.equal(JSON.parse((await exec("curl", ["-fsS", url + probe])).stdout).status, "pass");
+    const scrape = await exec("curl", ["-fsS", "-H", "Authorization: Bearer " + bot, url + "/metrics"]);
+    assert.match(
+      scrape.stdout,
+      /^backplane_operation_duration_count\{module="cache",method="set",app="curl",code="OK"[^}]*\} 1$/m,
+    );
+    assert.match(scrape.stdout, /^http_server_request_duration_count\{endpoint="files",[^}]*"206"[^}]*\} 1$/m);
     await assert.rejects(
-      exec(runtime, [cli], { cwd: tmp, env: daemonEnv, timeout: 8000 }),
+      // Its own data root, because the scheduler's lock on the shared one would stop it before it binds.
+      exec(runtime, [cli], { cwd: tmp, env: { ...daemonEnv, BACKPLANE_DATA_DIR: join(tmp, "busy-port") }, timeout: 8000 }),
       failedWith(1, /EADDRINUSE|port .* in use/i),
     );
     // VERIFIED: lsof prints `*:<port>` for IPv4 and IPv6 wildcard listeners. A connect probe to 127.0.0.2 cannot
@@ -302,7 +331,6 @@ try {
     "API_KEY=" + bot + "\nPORT=" + port + "\nBACKPLANE_DATA_DIR=./data\n",
     { mode: 0o600 },
   );
-  await cp("input/v0.1.0", join(tmp, "data"), { recursive: true });
   await runPhase("node", "node-first", "-");
   await rm(join(tmp, "node_modules"), { recursive: true, force: true });
   await exec("bun", ["install"], { cwd: tmp, timeout: 120000 });
@@ -313,7 +341,8 @@ try {
   const scope: { app: string; tenant: string; bucket: string } = JSON.parse(
     await readFile(fixture, "utf8"),
   );
-  const part = (value: string) => "x" + Buffer.from(value).toString("hex");
+  // A lowercase ASCII word keeps its spelling on disk, followed by `-` and the first 8 hex digits of its SHA-256.
+  const part = (value: string) => value + "-" + createHash("sha256").update(value).digest("hex").slice(0, 8);
   const native = await openDatabase(
     await createFileBackend(
       join(tmp, "data", part(scope.app), part(scope.tenant), "db", "main"),
@@ -327,6 +356,16 @@ try {
   } finally {
     await native.close();
   }
+  // Each daemon start and stop left one line in the daemon's own log, which no caller can address.
+  const own = await openFileLogStore(join(tmp, "data", "_backplane", "logs"), "log");
+  const lines: string[] = [];
+  try {
+    for await (const record of own.records()) lines.push(record.level + " " + record.message);
+  } finally {
+    await own.close();
+  }
+  assert.equal(lines.filter((line) => line === "info listening http://127.0.0.1:" + port).length, daemons);
+  assert.equal(lines.filter((line) => line === "info stopping").length, daemons);
   const evidence = {
     version: "0.3.0",
     platform: process.platform,
@@ -335,8 +374,7 @@ try {
       .update(await readFile(tarball))
       .digest("hex"),
     installers: ["npm", "bun"],
-    upgradeFixture: "v0.1.0 packed daemon",
-    upstreamReadback: "defuss-db 3.1.0",
+    upstreamReadback: "defuss-db 3.3.0",
     phases: observed,
   };
   await mkdir("output", { recursive: true });

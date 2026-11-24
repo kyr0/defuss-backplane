@@ -38,7 +38,6 @@ output/*
 input/*
 .vae/SWARM_STATUS.yaml
 !input/acceptance.json
-!input/v0.1.0/
 release/
 
 __pycache__/

@@ -1,7 +1,10 @@
 /** VERIFIED: The installed client and the official MCP client manage one schedule and report on its runs across a
  * daemon restart on the other runtime. */
 import assert from "node:assert/strict";
+import { createServer } from "node:http";
+import { once } from "node:events";
 import { setTimeout as pause } from "node:timers/promises";
+import { createRpcServer } from "defuss-rpc/server";
 import { BackplaneError, connectBackplane } from "defuss-backplane/client";
 import {
   Client,
@@ -36,9 +39,45 @@ async function tool<T = unknown>(
 }
 type Schedule = Awaited<ReturnType<typeof queue.get>> & {};
 const mode = process.argv[2];
+/** An app's defuss-rpc server on loopback receives one scheduled callback from the daemon, with the bot key. */
+async function checkCallback() {
+  const calls: { args: unknown[]; authorization?: string }[] = [];
+  let authorization: string | undefined;
+  const rpc = createRpcServer({ probe: { ping: async (...args: unknown[]) => calls.push({ args, authorization }) } });
+  const server = createServer(async (req, res) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(chunk as Buffer);
+    authorization = req.headers.authorization;
+    const answer = await rpc.fetch(
+      new Request("http://127.0.0.1" + req.url, { method: req.method, headers: req.headers as HeadersInit, body: Buffer.concat(chunks) }),
+    );
+    res.writeHead(answer.status, Object.fromEntries(answer.headers)).end(Buffer.from(await answer.arrayBuffer()));
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const callbacks = (await connectBackplane({ app: scope.app })).tenant(scope.tenant).scheduler("callbacks");
+  try {
+    await callbacks.create({
+      id: mode,
+      cron: "* * * * * *",
+      handler: "_rpc",
+      payload: {
+        url: "http://127.0.0.1:" + (server.address() as { port: number }).port + "/rpc",
+        className: "probe",
+        methodName: "ping",
+        args: [mode],
+      },
+    });
+    for (let end = Date.now() + 10000; !calls.length && Date.now() < end; ) await pause(25);
+    assert.deepEqual(calls[0], { args: [mode], authorization: "Bearer " + process.env.API_KEY });
+  } finally {
+    await callbacks.terminate({ schedule: mode }, { cause: "phase over" });
+    server.close();
+  }
+}
 try {
   const tools = (await agent.listTools()).tools;
-  assert.equal(tools.length, 27);
+  assert.equal(tools.length, 29);
   if (mode === "scheduler-write") {
     const created = await queue.create(
       { id: "one", handler: "rollup", cron: "* * * * * *", retry: { baseMs: 0 } },
@@ -165,9 +204,11 @@ try {
       ),
     );
   }
+  await checkCallback();
   console.log(
     JSON.stringify({
       phase: mode,
+      callback: "delivered",
       tools: tools.length,
       consumer: process.versions.bun ?? process.version,
     }),

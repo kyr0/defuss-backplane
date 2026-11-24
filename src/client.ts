@@ -1,4 +1,4 @@
-/** VERIFIED: Headers are scoped to this connection and sent on the first schema fetch. The stock defuss-rpc 3.0.0 discovery fetch omits them. */
+/** VERIFIED: Headers are scoped to this connection and sent on the first schema fetch. The stock defuss-rpc 4.0.0 discovery fetch omits them. */
 import { DSON } from "defuss-dson";
 import type { Document, NewDocument } from "defuss-db";
 import type { CacheResult } from "./cache.js";
@@ -13,6 +13,8 @@ import type {
   VfsRead,
 } from "./vfs.js";
 import type { Queue } from "defuss-scheduler";
+import type { LogRecord } from "defuss-logs";
+import type { LogEntry, LogPage, LogReadRequest } from "./logs.js";
 import { settings } from "./config.js";
 
 import { BackplaneError, statuses, type ErrorCode } from "./errors.js";
@@ -39,6 +41,8 @@ export type {
   Schedule,
 } from "defuss-scheduler";
 export type { CacheResult } from "./cache.js";
+export type { LogEntry, LogPage, LogReadRequest, LogScope } from "./logs.js";
+export type { LogLevel, LogRecord } from "defuss-logs";
 export type { Row, InputRow, Query } from "./db.js";
 export type {
   VfsDownload,
@@ -141,9 +145,38 @@ export async function connectBackplane(options: {
     );
     return DSON.parse(await response.text()) as T;
   }
+  /** One log: the app's own, or one tenant's when `tenant` is given. The handle is also a defuss-logs batch writer, so
+   * `createBatchSink(handle)` lets a defuss-logs logger in the application write here. VERIFIED by probe: DSON text
+   * spells binary arguments at up to 3.6 times their encoded size, so a batch of at most 256 KiB stays under the
+   * 1 MiB RPC body limit. */
+  function logs(tenant?: string) {
+    const scope = tenant === undefined ? { app } : { app, tenant };
+    const write = (entries: readonly LogEntry[]) =>
+      call<{ written: number }>("logs", "write", [scope, entries]);
+    return {
+      write,
+      read: (request: LogReadRequest = {}) => call<LogPage>("logs", "read", [scope, request]),
+      maxIngestBatchRecords: 1000,
+      maxIngestBatchBytes: 256 * 1024,
+      maxLogRecordBytes: 256 * 1024,
+      appendBatchAtomic: (records: readonly LogRecord[]) => write(records),
+      async appendMany(records: Iterable<LogRecord>) {
+        const all = [...records];
+        let written = 0,
+          batches = 0;
+        for (let at = 0; at < all.length; at += 1000, batches++)
+          written += (await write(all.slice(at, at + 1000))).written;
+        return { written, batches };
+      },
+    };
+  }
   return {
+    /** The app's own log, for records that belong to no tenant. */
+    logs: () => logs(),
     tenant(tenant: string) {
       return {
+        /** This tenant's log of the app. */
+        logs: () => logs(tenant),
         cache(bucket: string) {
           const scope = { app, tenant, bucket };
           return {
@@ -179,8 +212,8 @@ export async function connectBackplane(options: {
               call<{ rows: Partial<T>[] }>("db", "query", [scope, request]),
           };
         },
-        /** One scheduler queue. It is also a defuss-scheduler WorkerPort, so `startWorker` accepts it. Against a
-         * daemon started without BACKPLANE_SCHEDULER=1, every call rejects with "Method missing from server schema". */
+        /** One scheduler queue. It is also a defuss-scheduler WorkerPort, so `startWorker` accepts it. A schedule with
+         * handler `_rpc` needs no worker: the daemon calls the app's RPC function named in its payload. */
         scheduler(bucket: string): Queue {
           const scope = { app, tenant, bucket };
           const method =
@@ -268,7 +301,10 @@ export async function connectBackplane(options: {
               return {
                 found: true,
                 key,
-                size: Number(response.headers.get("content-length")),
+                // Bun drops Content-Length from streamed bodies, so the daemon repeats it in x-size.
+                size: Number(
+                  response.headers.get("x-size") ?? response.headers.get("content-length"),
+                ),
                 revision: (response.headers.get("etag") ?? "").slice(1, -1),
                 mtimeMs: Number(response.headers.get("x-mtime-ms")),
                 stream: response.body,

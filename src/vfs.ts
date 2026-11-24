@@ -20,6 +20,7 @@ import {
 
 /** Calls on `/rpc` and MCP return at most 1 MiB of object bytes. Larger objects use the streaming endpoint. */
 const INLINE_LIMIT = 1024 * 1024;
+const WINDOW = 256 * 1024;
 
 export type VfsObject = {
   key: string;
@@ -273,5 +274,48 @@ export function createVfsService(root: string) {
         .catch(reject);
     });
   }
-  return { api, upload, download, close: () => stores.close() };
+  /** Streams `length` bytes from `offset` of the object revision `revision`, one 256 KiB window per pull. defuss-vfs
+   * getStream starts at byte 0, so a seek into a large video would read everything before it. Each window is its own
+   * read, so the stream fails with REVISION_CONFLICT when a write replaced the object since the first one. */
+  function readRange(
+    scope: Scope,
+    key: string,
+    revision: string,
+    offset: number,
+    length: number,
+  ) {
+    objectKey(key);
+    let position = offset;
+    const end = offset + length;
+    return new ReadableStream<Uint8Array>(
+      {
+        async pull(controller) {
+          const size = Math.min(WINDOW, end - position);
+          const read = await stores.use(
+            volume(scope),
+            (vfs) =>
+              found(vfs.objects.getWithMetadata(key, { offset: position, length: size })),
+            () => undefined,
+          );
+          if (read?.metadata.revision !== revision || read.data.byteLength !== size)
+            throw new BackplaneError(
+              "REVISION_CONFLICT",
+              "The object changed during the read",
+            );
+          position += size;
+          controller.enqueue(read.data);
+          if (position >= end) controller.close();
+        },
+      },
+      { highWaterMark: 0 },
+    );
+  }
+  return {
+    api,
+    upload,
+    download,
+    readRange,
+    handles: () => stores.stats(),
+    close: () => stores.close(),
+  };
 }

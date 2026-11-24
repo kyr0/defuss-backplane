@@ -72,6 +72,13 @@ export class HandlePool<T extends Handle> {
     }
   }
 
+  /** Open handles, and how many of them a running operation holds. */
+  stats() {
+    let busy = 0;
+    for (const item of this.entries.values()) if (item.users) busy++;
+    return { open: this.entries.size, busy };
+  }
+
   /** The owner drains HTTP requests before closing the pool. */
   async close() {
     this.stopped = true;

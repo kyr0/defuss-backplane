@@ -1,6 +1,7 @@
 import { test, expect } from "bun:test";
 import { connectBackplane } from "../src/client.js";
 import { randomBytes } from "node:crypto";
+import { request } from "node:http";
 import { start } from "./daemon.js";
 
 test("authenticated discovery, shared RPC/MCP calls and loopback HTTP policy", async () => {
@@ -53,6 +54,20 @@ test("authenticated discovery, shared RPC/MCP calls and loopback HTTP policy", a
       "db.insert",
       "db.query",
       "db.update",
+      "logs.read",
+      "logs.write",
+      "scheduler.create",
+      "scheduler.get",
+      "scheduler.getRun",
+      "scheduler.list",
+      "scheduler.listRuns",
+      "scheduler.pause",
+      "scheduler.remove",
+      "scheduler.resume",
+      "scheduler.runHistory",
+      "scheduler.scheduleHistory",
+      "scheduler.terminate",
+      "scheduler.update",
       "vfs.delete",
       "vfs.get",
       "vfs.head",
@@ -247,3 +262,33 @@ test("VFS objects stream past the body limit and share revisions with RPC and MC
     await stop();
   }
 }, 30000);
+
+test("an upload cut off mid-body keeps the previous object", async () => {
+  const { daemon, headers, stop } = await start();
+  try {
+    const vfs = (await connectBackplane({ app: "shop" })).tenant("acme").vfs("media");
+    const before = await vfs.put("clip.bin", "first");
+    const target = new URL(
+      daemon.url + "/vfs/object?" + new URLSearchParams({ app: "shop", tenant: "acme", bucket: "media", key: "clip.bin" }),
+    );
+    // A raw request promises 4 MiB, sends 64 KiB and drops the connection.
+    await new Promise<void>((resolve) => {
+      const req = request(target, {
+        method: "PUT",
+        headers: { ...headers, "Content-Length": String(4 * 1024 * 1024) },
+      });
+      req.on("error", () => resolve());
+      req.on("close", () => resolve());
+      req.write(randomBytes(64 * 1024), () => setTimeout(() => req.destroy(), 100));
+    });
+    for (let i = 0; i < 20; i++) {
+      expect(await vfs.head("clip.bin")).toEqual({ found: true, ...before });
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    // The volume is free again: the next upload replaces the object.
+    const after = await vfs.upload("clip.bin", "second");
+    expect(after.revision).not.toBe(before.revision);
+  } finally {
+    await stop();
+  }
+});

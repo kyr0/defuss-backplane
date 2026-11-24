@@ -1,4 +1,5 @@
 /** VERIFIED: The services run these checks before leasing a store handle, so a rejected scope, key or ID never reaches the filesystem. */
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import type { PrimaryKey } from "defuss-db";
 
@@ -8,9 +9,30 @@ export interface Scope {
   bucket: string;
 }
 
-/** Encodes one scope identifier as `x` + lowercase hex of its UTF-8 bytes.
- * VERIFIED: hex keeps distinct names distinct on case-insensitive volumes, which escaping or slugging would not.
- * defuss-db 3.1.0 names must match `[A-Za-z][A-Za-z0-9_-]{0,63}`, so the `x` supplies the leading letter. */
+/** A readable form of a name: NFC, lowercase, every run of characters other than letters, digits and marks of any
+ * script turned into one `-`, at most 48 UTF-16 code units, starting with a letter or digit. `x` stands in for a name
+ * without letters or digits. */
+function slug(value: string) {
+  const words = value
+    .normalize("NFC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\p{M}]+/gu, "-")
+    .replace(/^[\p{M}-]+|-+$/gu, "");
+  let short = "";
+  // Whole code points, so a cut never splits a surrogate pair.
+  for (const char of words) {
+    if (short.length + char.length > 48) break;
+    short += char;
+  }
+  return short.replace(/-+$/, "") || "x";
+}
+
+/** Encodes one scope identifier as its slug, `-` and the first 8 hex digits of the SHA-256 of its exact UTF-8 bytes,
+ * so `ls` shows the name. The slug alone merges `Shop` and `shop`, `my shop` and `my-shop`, or the NFC and NFD
+ * spellings of `Café`; the hash keeps them apart, also on case-insensitive and normalizing volumes, because it is
+ * ASCII. 8 hex digits guard against accidental collisions, not chosen ones.
+ * VERIFIED from the defuss-db 3.3.0 source: a collection name matches `^[\p{L}\p{N}][\p{L}\p{N}\p{M}_-]*$` with 1 to
+ * 64 code units. An encoded name holds at most 57 and never contains `_`, which `db.ts` relies on. */
 export function component(value: unknown) {
   if (
     typeof value !== "string" ||
@@ -21,13 +43,22 @@ export function component(value: unknown) {
     throw new TypeError(
       "Namespace identifiers must contain 1 to 48 valid UTF-8 bytes",
     );
-  return "x" + Buffer.from(value).toString("hex");
+  return slug(value) + "-" + createHash("sha256").update(value).digest("hex").slice(0, 8);
+}
+
+/** Encodes an app name a caller may use. Names starting with `_` belong to the defuss libraries: the daemon writes its
+ * own log as `_backplane`, so a caller that could claim the prefix could forge it. */
+export function appComponent(value: unknown) {
+  const encoded = component(value);
+  if ((value as string).startsWith("_"))
+    throw new TypeError("App names starting with _ are reserved for the defuss libraries");
+  return encoded;
 }
 
 /** Rejects a scope whose fields the storage services would reject, so every service accepts the same names. */
 export function checkedScope(scope: Scope) {
   record(scope, "scope");
-  component(scope.app);
+  appComponent(scope.app);
   component(scope.tenant);
   component(scope.bucket);
   return scope;
@@ -37,7 +68,7 @@ export function checkedScope(scope: Scope) {
 export function address(root: string, scope: Scope) {
   record(scope, "scope");
   return {
-    tenant: join(root, component(scope.app), component(scope.tenant)),
+    tenant: join(root, appComponent(scope.app), component(scope.tenant)),
     bucket: component(scope.bucket),
   };
 }

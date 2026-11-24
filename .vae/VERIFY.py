@@ -68,6 +68,7 @@ RULES += [
      "claim": "dependencies resolve from the registry, so a CI checkout without sibling repos installs them"},
     {"id": "backplane.version-sync", "kind": "command",
      "command": "v=$(node -p \"require('./package.json').version\") && grep -q \"version: \\\"$v\\\"\" src/tools.ts"
-                " && grep -q \"version: \\\"$v\\\"\" scripts/e2e.ts && grep -qF \"defuss-backplane-$v.tgz\" scripts/e2e.ts",
-     "claim": "the MCP server version and the packed-consumer tarball follow package.json"},
+                " && grep -q \"version: \\\"$v\\\"\" scripts/e2e.ts && grep -qF \"defuss-backplane-$v.tgz\" scripts/e2e.ts"
+                " && grep -q \"serviceVersion: \\\"$v\\\"\" src/telemetry.ts",
+     "claim": "the MCP server version, the telemetry service version and the packed-consumer tarball follow package.json"},
 ]

@@ -57,3 +57,46 @@ Wrap: EVERY lead becomes a test | .vae/VERIFY.py rule | one MEMORY line with BC,
 2026-11-23T21:01:51Z s=dcdb118f FINDING src/tools.ts:446 schedulerTools history comment learn=none: VERIFIED: comment wording against an upstream document; no rule kind can check it.
 2026-11-23T22:42:45Z s=dcdb118f DONE fp=8f3788b61aa2 cov=98.8% paths=ARCH.md,CHANGELOG.md,README.md,bun.lock(+14)
 2026-11-23T22:42:45Z s=dcdb118f FINDING src/tools.ts:110 McpServer version, scripts/e2e.ts:27 and :331 learn=verifier: VERIFIED: rule backplane.version-sync in .vae/VERIFY.py fails when src/tools.ts or scripts/e2e.ts disagree with package.json; a probe with 0.2.9 in tools.ts mad
+2026-11-23T23:02:25Z s=dcdb118f DONE fp=2ace88988c3b cov=98.8% paths=ARCH.md,CHANGELOG.md,bun.lock,package.json(+5)
+2026-11-23T23:02:25Z s=dcdb118f FINDING src/server.ts listen close(), src/tools.ts makeTools learn=test: VERIFIED: tests/scheduler.test.ts 'two daemons in one process serve only their own functions and data' runs a scheduling and a plain daemon at once and checks s
+2026-11-23T23:02:25Z s=dcdb118f FINDING ARCH.md:8, ARCH.md:20, ARCH.md:36, src/client.ts:1, src/services.ts:1 learn=none: VERIFIED: version wording against upstream source; no rule kind can check it.
+2026-11-23T23:02:25Z s=dcdb118f FINDING scripts/e2e.ts npm install --prefer-offline learn=memory: VERIFIED: .vae/MEMORY.md line scoped to the e2e npm install records the refresh command.
+2026-11-24T18:07:50Z s=dcdb118f DONE fp=3a7e1c0eb823 cov=98.5% paths=ARCH.md,CHANGELOG.md,README.md,bun.lock(+13)
+2026-11-24T18:07:50Z s=dcdb118f FINDING src/client.ts download size, src/transfer.ts object/files headers learn=test: VERIFIED: the existing expect(read).toMatchObject(stored) in tests/http.test.ts now runs against defuss-serve on Bun and fails without x-size.
+2026-11-24T18:07:50Z s=dcdb118f FINDING src/server.ts listen, listener address check learn=none: VERIFIED: defuss-serve binds the configured 127.0.0.1, so no test can make the address differ; lsof in the packed-consumer test checks the listener.
+2026-11-24T18:07:50Z s=dcdb118f FINDING ARCH.md Security paragraph, upload abort claim learn=test: VERIFIED: the new test promises 4 MiB, sends 64 KiB, drops the socket and checks the old revision and a later upload.
+2026-11-24T18:07:50Z s=dcdb118f FINDING tests/scheduler.test.ts worker test learn=none: VERIFIED: not reproduced in 33 runs, so neither the cause nor a fix is established.
+2026-11-24T19:27:55Z s=aceaa8e2 FAIL prose
+2026-11-24T19:30:26Z s=dcdb118f DONE fp=594bc62bc734 cov=98.0% paths=ARCH.md,CHANGELOG.md,README.md,bun.lock(+22)
+2026-11-24T19:30:26Z s=dcdb118f FINDING src/telemetry.ts:onExportError learn=none: VERIFIED: a test would need a refused OTLP endpoint and stderr capture of an in-process daemon, which pins log text rather than behavior.
+2026-11-24T19:30:26Z s=dcdb118f FINDING src/telemetry.ts:createTelemetry otlp learn=verifier: VERIFIED: make lint runs tsc over src, so the same mistake fails the gate.
+2026-11-24T19:30:26Z s=dcdb118f FINDING tests/o11y.test.ts:57 learn=test: VERIFIED: tests/o11y.test.ts asserts both series.
+2026-11-24T19:30:26Z s=dcdb118f FINDING src/telemetry.ts:quiet learn=none: VERIFIED: reproducing it needs a handler that outlives the 3 s drain; the guard is one try/catch at the only write sites.
+2026-11-24T19:30:26Z s=dcdb118f FINDING src/telemetry.ts:volume learn=test: VERIFIED: the o11y test checks readiness 200 on a fresh root and 503 for a root below a regular file.
+2026-11-24T19:30:26Z s=dcdb118f FINDING tests/scheduler.test.ts worker test learn=none: VERIFIED: not reproduced, so neither the cause nor a fix is established.
+2026-11-24T19:53:08Z s=aceaa8e2 FAIL tests.unit,tests.e2e.1,coverage
+2026-11-24T20:03:40Z s=dcdb118f DONE fp=637c6a7f8355 cov=98.2% paths=ARCH.md,CHANGELOG.md,README.md,bun.lock(+31)
+2026-11-24T20:03:40Z s=dcdb118f FINDING src/client.ts:logs maxIngestBatchBytes learn=test: VERIFIED: tests/logs.test.ts writes the five binary records through a defuss-logs batch sink.
+2026-11-24T20:03:40Z s=dcdb118f FINDING src/logs.ts:read learn=test: VERIFIED: tests/logs.test.ts expects INVALID_ARGUMENT for an invalid request on an absent log.
+2026-11-24T20:03:40Z s=dcdb118f FINDING tests/logs.test.ts own log learn=test: VERIFIED: the test and both pages state the ordering.
+2026-11-24T20:03:40Z s=dcdb118f FINDING scripts/e2e.ts own-log readback learn=test: VERIFIED: the e2e compares against the counted daemon starts.
+2026-11-24T20:03:40Z s=dcdb118f FINDING src/server.ts listen learn=test: VERIFIED: tests/o11y.test.ts covers both behaviors; CHANGELOG states the change.
+2026-11-24T20:03:40Z s=dcdb118f FINDING defuss-rpc console lines learn=none: VERIFIED: an upstream hook is needed; README and ARCH say these lines reach stdout and stderr only.
+2026-11-24T20:03:59Z s=aceaa8e2 FAIL tests.unit
+2026-11-24T20:10:43Z s=dcdb118f DONE fp=8545d844fe0e cov=98.2% paths=ARCH.md,CHANGELOG.md,README.md,bun.lock(+31)
+2026-11-24T20:10:43Z s=dcdb118f FINDING src/logs.ts:read isOwnLog learn=test: VERIFIED: tests/logs.test.ts and scripts/consumer.ts assert the read exception and the write rejection.
+2026-11-24T20:25:03Z s=dcdb118f DONE fp=ab4e7f7410f8 cov=98.2% paths=ARCH.md,CHANGELOG.md,README.md,bun.lock(+32)
+2026-11-24T20:25:03Z s=dcdb118f FINDING src/db.ts:version learn=verifier: VERIFIED: make lint runs tsc over src, so a repeat fails the gate.
+2026-11-24T20:25:03Z s=dcdb118f FINDING src/scope.ts:component learn=test: VERIFIED: tests/storage.test.ts checks the examples, the pattern, the length, the absence of _, case and punctuation separation in every engine, and 商店 and 123 
+2026-11-24T20:25:03Z s=dcdb118f FINDING scripts/e2e.ts v0.1.0 fixture learn=test: VERIFIED: tests/revisions.test.ts and the e2e native readback cover the replaced checks.
+2026-11-24T20:52:57Z s=dcdb118f FAIL tests.e2e.1
+2026-11-24T21:03:45Z s=dcdb118f FAIL tests.unit
+2026-11-24T21:09:14Z s=dcdb118f FINDING tests/scheduler.test.ts worker test got payload 7: an every-second schedule fired between create and the payload edit; fixed by creating it yearly and setting the cron in the edit learn=test
+2026-11-24T21:11:49Z s=dcdb118f DONE fp=7fefe08cf20f cov=98.0% paths=ARCH.md,CHANGELOG.md,README.md,bun.lock(+35)
+2026-11-24T21:11:49Z s=dcdb118f FINDING src/log.ts:print; src/callbacks.ts:call warn lines learn=test: VERIFIED: tests/logs.test.ts 'a message with line breaks stays one line on the console' runs print in a child process and fails on a raw line break.
+2026-11-24T21:11:49Z s=dcdb118f FINDING scripts/consumer-revisions.ts:61-81 learn=test: VERIFIED: the e2e asserts every tool's hints in every phase.
+2026-11-24T21:11:49Z s=dcdb118f FINDING src/callbacks.ts:call status mapping learn=test: VERIFIED: covered by tests/callbacks.test.ts.
+2026-11-24T21:11:49Z s=dcdb118f FINDING src/callbacks.ts:call result learn=test: VERIFIED: tests/callbacks.test.ts expects {status:200,result:{ok:true}}.
+2026-11-24T21:11:49Z s=dcdb118f FINDING src/scheduler.ts:schedulerApi claim learn=test: VERIFIED: tests/callbacks.test.ts covers the reserved handler, the bad URLs and the worker claim.
+2026-11-24T21:11:49Z s=dcdb118f FINDING src/callbacks.ts security boundary learn=none: VERIFIED: ARCH.md security section states the boundary; the tests cover rejection.
+2026-11-24T21:11:49Z s=dcdb118f FINDING tests/scheduler.test.ts:'schedules are shared by RPC and MCP, and the client queue runs a worker' learn=test: VERIFIED: the test itself now cannot see a pre-edit run; 5 consecutive runs passed.

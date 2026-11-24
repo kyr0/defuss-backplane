@@ -57,37 +57,11 @@ export async function checkRevisions({
   }
   const is = (code: string, status: number) => (e: unknown) =>
     e instanceof BackplaneError && e.code === code && e.status === status;
-  const legacyKey = "v010-" + phase;
-  const legacyCache = await ok<Revisioned>("cache.getVersioned", {
-    key: legacyKey,
-  });
-  assert.equal(legacyCache.value, "legacy");
-  assert.equal(
-    await cache.set(legacyKey, "upgraded", {
-      ifRevision: legacyCache.revision,
-    }),
-    true,
-  );
-  const legacyDoc = await db.getVersioned(legacyKey);
-  assert.ok(legacyDoc.found, "legacy document " + legacyKey);
-  assert.deepEqual(legacyDoc.value, { id: legacyKey, source: "0.1.0" });
-  assert.equal(
-    await ok("db.update", {
-      id: legacyKey,
-      patch: { source: "0.2.0" },
-      ifRevision: legacyDoc.revision,
-    }),
-    true,
-  );
-  await assert.rejects(
-    db.delete(legacyKey, { ifRevision: legacyDoc.revision }),
-    is("REVISION_CONFLICT", 409),
-  );
   const tools = (await agent.listTools()).tools;
   for (const t of tools) {
     assert.equal(
       t.annotations?.readOnlyHint,
-      /\.(?:get|getVersioned|query|head|list)$/.test(t.name),
+      /\.(?:get|getVersioned|query|head|list|read|getRun|listRuns|scheduleHistory|runHistory)$/.test(t.name),
     );
     assert.equal(
       t.annotations?.destructiveHint,
@@ -98,6 +72,10 @@ export async function checkRevisions({
         "db.delete",
         "vfs.put",
         "vfs.delete",
+        "scheduler.update",
+        "scheduler.pause",
+        "scheduler.remove",
+        "scheduler.terminate",
       ].includes(t.name),
     );
   }

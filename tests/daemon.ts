@@ -9,7 +9,14 @@ import {
   StreamableHTTPClientTransport,
 } from "@modelcontextprotocol/client";
 
-const names = ["PORT", "API_KEY", "BACKPLANE_DATA_DIR", "BACKPLANE_SCHEDULER"];
+const names = [
+  "PORT",
+  "API_KEY",
+  "BACKPLANE_DATA_DIR",
+  "BACKPLANE_CALLBACK_ORIGINS",
+  "BACKPLANE_OTLP",
+  "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
+];
 
 export async function freePort() {
   const probe = createServer();
@@ -22,7 +29,7 @@ export async function freePort() {
 }
 
 /** Starts a daemon on a free port with a fresh data root and key, and restores the environment when it stops.
- * `env` sets further daemon variables such as BACKPLANE_SCHEDULER. */
+ * `env` sets further daemon variables such as BACKPLANE_CALLBACK_ORIGINS. */
 export async function start(env: Record<string, string> = {}) {
   const root = await mkdtemp(join(tmpdir(), "backplane-http-"));
   const old = names.map((k) => process.env[k]);
@@ -33,8 +40,9 @@ export async function start(env: Record<string, string> = {}) {
       else process.env[k] = old[i];
     }
   }
-  // A BACKPLANE_SCHEDULER from the developer's shell must not switch scheduling on.
-  delete process.env.BACKPLANE_SCHEDULER;
+  // Settings from the developer's shell must not switch push on or allow callback origins.
+  delete process.env.BACKPLANE_OTLP;
+  delete process.env.BACKPLANE_CALLBACK_ORIGINS;
   Object.assign(process.env, {
     PORT: String(await freePort()),
     API_KEY: apiKey,
