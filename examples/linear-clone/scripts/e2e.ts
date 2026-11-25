@@ -181,7 +181,11 @@ const journeySteps: Step[] = [
     check(await page.isChecked("section.pm-issue [data-pm-sub]"), "sub-issue not stored");
   }],
   ["comment", async (page) => {
+    // A draft survives a re-render of the page: morph keeps the textarea and its typed text.
     await page.fill("section.pm-issue [data-pm-comment] textarea", "Checked in the browser");
+    await page.selectOption('section.pm-issue select[data-field="priority"]', "high");
+    await expectText(page, "section.pm-issue .pm-event", "set priority to High");
+    check((await value(page, "section.pm-issue [data-pm-comment] textarea")) === "Checked in the browser", "the draft was lost");
     await page.click('section.pm-issue [data-pm-comment] button[type="submit"]');
     await expectText(page, "section.pm-issue .pm-comment", "Checked in the browser");
     await reload(page);

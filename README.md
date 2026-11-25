@@ -296,6 +296,10 @@ The listener stays on 127.0.0.1, so a Prometheus server on another host cannot s
 
 App, tenant and bucket identifiers accept 1 to 48 valid UTF-8 bytes, and an app name must not start with `_`. Each appears on disk as a lowercase slug in its own script, `-` and 8 hex digits of its hash, such as `acme-gmbh-033aedd8` for `Acme GmbH`. Cache keys and file keys accept 1 to 1,024 valid UTF-8 bytes. Stop the service with SIGTERM or SIGINT. To back up the whole service, stop writers, shut down the daemon, then copy the data root. An application's own authentication determines which tenant it passes to the service.
 
+## Example app
+
+[examples/linear-clone](examples/linear-clone/README.md) is an issue tracker that keeps all its state in the backplane. It uses db, cache, vfs, logs and the scheduler with RPC callbacks, and serves its API over defuss-rpc and MCP.
+
 ## Development
 
 Install the versions in `mise.toml`, then run `make setup` and `make verify`. The latter runs lint, type checking, real storage and protocol tests, coverage, and a packed-consumer test across Node.js and Bun. The sources, tests and verification scripts are TypeScript. The strict compiler checks all three, so lint fails when a test or script calls the API with the wrong types. The packed-consumer test needs `curl`, `lsof` and npm on the `PATH`. Use `make start` for the Node.js daemon or `make start RUNTIME=bun` for Bun. `make status`, `make log` and `make stop` control the source-tree daemon.

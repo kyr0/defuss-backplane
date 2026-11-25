@@ -60,8 +60,11 @@ log: ## tail stdout and stderr logs (N=50 lines)
 	@for f in $(LOG).stdout $(LOG).stderr; do [ -f $$f ] && { echo "== $$f"; tail -n $(N) $$f; }; done; \
 	ls $(LOG).* >/dev/null 2>&1 || echo "∅ no logs for $(NAME)"
 
-metrics: ; @echo "UNKNOWN[metrics] BC undefined: the backplane's /metrics lines for app=linear-clone"; exit 2  ## print the app's backplane metrics
-bench:   ; @echo "UNKNOWN[bench] BC undefined: the Issues.list round trip over 1000 issues"; exit 2  ## time the hot paths
+metrics: ## print the running backplane's metric lines for app="linear-clone" (reads .env like the app)
+	bun scripts/metrics.ts
+
+bench: ## time the Issues.list round trip over 1000 issues against a throwaway backplane; writes output/bench.json
+	bun scripts/bench.ts
 
 test: ## run the tests against real subsystems
 	bun test ./tests
