@@ -18,6 +18,8 @@
     "defuss-i18n": "0.2.0",
     "defuss-logs": "0.3.0",
     "defuss-mcp": "0.6.2",
+    "defuss-morph": "0.3.0",
+    "defuss-query": "0.2.0",
     "defuss-rpc": "4.3.0",
     "defuss-serve": "0.4.0",
     "defuss-shadcn": "0.10.1",

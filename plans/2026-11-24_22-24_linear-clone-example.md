@@ -1,6 +1,6 @@
 # Plan: the linear-clone example app
 
-Status: in progress. M0 to M5 are done; M6 is built and waits for its proof, M7.
+Status: in progress. M0 to M7 are done.
 
 Tick a milestone `- [x]` when its proof passes, then run `verify` on its scope.
 
@@ -130,16 +130,18 @@ flowchart LR
     - a restart on another port updates the payload URL;
     - with `DIGEST_CRON` set to every second, the real backplane delivers a callback and an inbox item appears.
 - [x] **M5 Frontend shell.**
-  - A one-off extraction took the shell, the templates and the styles from defuss-shadcn 0.10.1's full-screen page (`docs/application/app-issue-tracker.html`), without the 15 pre-rendered issues, pages, notes, people, projects and other cycles. The inbox note, the assignee row and the project row became templates (`pm-tpl-note`, `pm-tpl-person`, `pm-tpl-project`), avatars show initials, and the issue template gained sub-issues and attachments.
+  - A one-off extraction took the shell and the styles from defuss-shadcn 0.10.1's full-screen page (`docs/application/app-issue-tracker.html`), without the 15 pre-rendered issues, pages, notes, people, projects and other cycles.
+  - Correction by the human after the first version, which cloned `<template>` elements and filled them with `innerHTML`, `replaceChildren` and `textContent`: the frontend renders with defuss-morph and changes the DOM with defuss-query. The scaffold's row, card, issue, note, person and project templates became JSX components (`jsxImportSource: "defuss-morph"`); each region is a defuss-morph `reactive()` binding to the store, keyed by issue ID; the shell changes through defuss-query's `attr`, `prop`, `text` and `val`. The gate rule `linear-clone.morph-rendering` rejects hand-written DOM writes in `src/web`.
+  - VERIFIED: defuss-query 0.2.0 declares `defuss-morph ^0.2.0`; Bun installs it next to defuss-morph 0.3.0 (which has the JSX runtime and `reactive()`) as one copy, and the journey passes on it.
+  - Lucide icons are imported one by one (`src/web/icons.tsx`): the shell gets them once through `createIcons`, rendered regions through `<Icon>`. The bundle shrank from 553 KB to 127 KB, and the e2e fails on a leftover `i[data-lucide]`.
   - VERIFIED: the app bundle has no `file-input`; the build copies `dist/components/file-input/file-input.min.css`, and the plain file input needs no script.
   - `scripts/e2e.ts` runs with Node.js: it deploys `dist/` and the seed into a temporary directory, starts the real backplane and `bun dist/server.js` there, and opens every route in Chromium, Firefox and WebKit without console errors.
   - `src/web/index.html`: the scaffold shell and templates without the demo issues.
   - `src/web/tracker.css`: the scaffold's styles.
-  - `src/web/main.ts`: i18n, router, RPC client and Lucide.
+  - `src/web/main.tsx`: i18n, router, RPC client, region bindings and the shell's events.
   - `scripts/build.ts`: `Bun.build` for the browser, then copies the defuss-shadcn app bundle into `dist/public`.
-  - UNKNOWN: whether the app bundle contains `file-input` for attachments; probe with grep. If not, add that component's CSS and JS from `dist/components`.
   - Proof: Chromium opens every route against a seeded workspace without console errors.
-- [ ] **M6 Frontend features.**
+- [x] **M6 Frontend features.**
   - `src/web/store.ts`, `src/web/actions.ts` and the views:
     - list, board with drag and drop, and data grid;
     - scope chips and the filter;
@@ -150,14 +152,19 @@ flowchart LR
     - inbox, cycles with the burn-up chart, projects;
     - the language and theme switches, which persist through `df$.store.persisted`.
   - A `REVISION_CONFLICT` shows a toast and reloads the issue.
+  - Writes run one after another, and a page edit carries the revision the previous write left. VERIFIED: before that, three quick select changes on one page made the second fail with REVISION_CONFLICT against the first.
   - The issue model gained `startedAt`, which the burn-up's started series needs, and the seed shifts instants by the exact time since noon of its day, so the scaffold's "12m ago" stays 12 minutes.
   - Proof: M7.
-- [ ] **M7 Browser end-to-end.**
+- [x] **M7 Browser end-to-end.**
   - `scripts/e2e.ts` builds the artifact and starts the real backplane and the built server as child processes on temporary data.
   - On Chromium it covers every route, every view switch, drag and drop, the context menu, create, every issue-page edit, an attachment upload and download, the palette, the shortcuts, inbox, the cycle numbers after a status change, projects, and the language switch after a reload. It reloads after each write to prove persistence.
   - On Firefox and WebKit it runs the smoke from decision 6.
   - It writes `output/e2e.json`.
-  - Proof: `make e2e` exits 0, and the file lists every route and browser.
+  - Proof: `make e2e` exits 0, and the file lists every route and browser. VERIFIED: 20 checks pass, 14 Chromium steps and 3 each in Firefox and WebKit.
+  - The page fails on console errors and on any HTTP status of 400 or more, except one: VERIFIED: defuss-rpc 4.3.0's client asks `HEAD /rpc/upload/<id>` before an upload with an `uploadId`, and a fresh ID answers 404 (nothing to resume). The app sends an `uploadId` on every upload because it carries the issue ID.
+  - VERIFIED: the journey's viewport is 1600 by 900, because at 1280 the board's Done column lies outside the viewport and a drag cannot reach it.
+  - VERIFIED: the scaffold's `.pm-table { display: none }` for the issue table also hid the projects table, which shared the class; the projects table has its own class `pm-projects`.
+  - `make setup` installs the three browsers with `playwright-core install`, which returns at once when they are present, and the root rule runs the example's `setup verify`.
 - [ ] **M8 Operations and docs.**
   - `make start` builds and runs detached, with `tmp/linear-clone.pid` and `var/log/linear-clone.std{out,err}`, and fails if the backplane is not ready. Also `stop`, `status`, `log`, and `metrics`, which reads the backplane's `/metrics` lines with `app="linear-clone"`.
   - `bench`: the `Issues.list` round trip over 1000 issues, written to `output/bench.json`.

@@ -149,14 +149,11 @@
               <summary class="pm-group-head"><i data-lucide="chevron-right"></i><span class="pm-status" aria-hidden="true"></span><strong>In Review</strong><span class="pm-count">2</span></summary>
               <ul class="pm-rows">
                 
-                
               </ul>
             </details>
             <details class="pm-group" data-status="progress" open>
               <summary class="pm-group-head"><i data-lucide="chevron-right"></i><span class="pm-status" aria-hidden="true"></span><strong>In Progress</strong><span class="pm-count">3</span></summary>
               <ul class="pm-rows">
-                
-                
                 
               </ul>
             </details>
@@ -165,23 +162,17 @@
               <ul class="pm-rows">
                 
                 
-                
-                
               </ul>
             </details>
             <details class="pm-group" data-status="backlog" open>
               <summary class="pm-group-head"><i data-lucide="chevron-right"></i><span class="pm-status" aria-hidden="true"></span><strong>Backlog</strong><span class="pm-count">3</span></summary>
               <ul class="pm-rows">
                 
-                
-                
               </ul>
             </details>
             <details class="pm-group" data-status="done" open>
               <summary class="pm-group-head"><i data-lucide="chevron-right"></i><span class="pm-status" aria-hidden="true"></span><strong>Done</strong><span class="pm-count">3</span></summary>
               <ul class="pm-rows">
-                
-                
                 
               </ul>
             </details>
@@ -209,15 +200,11 @@
               <header class="pm-col-head"><span class="pm-status" aria-hidden="true"></span><strong>Backlog</strong><span class="pm-count">3</span><button class="btn" data-variant="ghost" data-size="icon-sm" type="button" data-pm-create="" data-pm-status="backlog" aria-label="New issue in Backlog"><i data-lucide="plus"></i></button></header>
               <div class="pm-cards">
                 
-                
-                
               </div>
             </section>
             <section class="pm-col" data-status="todo" aria-label="Todo">
               <header class="pm-col-head"><span class="pm-status" aria-hidden="true"></span><strong>Todo</strong><span class="pm-count">4</span><button class="btn" data-variant="ghost" data-size="icon-sm" type="button" data-pm-create="" data-pm-status="todo" aria-label="New issue in Todo"><i data-lucide="plus"></i></button></header>
               <div class="pm-cards">
-                
-                
                 
                 
               </div>
@@ -226,22 +213,17 @@
               <header class="pm-col-head"><span class="pm-status" aria-hidden="true"></span><strong>In Progress</strong><span class="pm-count">3</span><button class="btn" data-variant="ghost" data-size="icon-sm" type="button" data-pm-create="" data-pm-status="progress" aria-label="New issue in In Progress"><i data-lucide="plus"></i></button></header>
               <div class="pm-cards">
                 
-                
-                
               </div>
             </section>
             <section class="pm-col" data-status="review" aria-label="In Review">
               <header class="pm-col-head"><span class="pm-status" aria-hidden="true"></span><strong>In Review</strong><span class="pm-count">2</span><button class="btn" data-variant="ghost" data-size="icon-sm" type="button" data-pm-create="" data-pm-status="review" aria-label="New issue in In Review"><i data-lucide="plus"></i></button></header>
               <div class="pm-cards">
                 
-                
               </div>
             </section>
             <section class="pm-col" data-status="done" aria-label="Done">
               <header class="pm-col-head"><span class="pm-status" aria-hidden="true"></span><strong>Done</strong><span class="pm-count">3</span><button class="btn" data-variant="ghost" data-size="icon-sm" type="button" data-pm-create="" data-pm-status="done" aria-label="New issue in Done"><i data-lucide="plus"></i></button></header>
               <div class="pm-cards">
-                
-                
                 
               </div>
             </section>
@@ -262,8 +244,6 @@
         <div class="pm-scroll">
           <ul class="pm-rows pm-mine" data-pm-mine="">
             
-            
-            
           </ul>
         </div>
       </section>
@@ -279,9 +259,6 @@
         </header>
         <div class="pm-scroll">
           <ul class="pm-notes">
-            
-            
-            
             
             
             
@@ -320,9 +297,6 @@
                   
                   
                   
-                  
-                  
-                  
                 </ul>
               </div>
               <div class="pm-panel">
@@ -344,13 +318,10 @@
           <button class="btn" data-size="sm" type="button" data-toast="New project" data-toast-desc="Projects are a click away in the full product."><i data-lucide="plus"></i><span data-i18n-target="projects-new">New project</span></button>
         </header>
         <div class="pm-scroll">
-          <div class="table-container pm-table">
+          <div class="table-container pm-projects">
             <table class="table">
               <thead><tr class="table-row"><th class="table-head" scope="col">Name</th><th class="table-head" scope="col">Health</th><th class="table-head" scope="col">Lead</th><th class="table-head" scope="col">Target</th><th class="table-head" scope="col">Issues</th><th class="table-head" scope="col">Progress</th></tr></thead>
               <tbody>
-                
-                
-                
                 
                 
               </tbody>
@@ -358,23 +329,8 @@
           </div>
         </div>
       </section>
-
-      <!-- Issue pages -->
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
+      <!-- Issue page: one section, morphed from the store for the route's issue -->
+      <section class="pm-view pm-issue" id="issue" hidden aria-label="Issue"></section>
     </div>
   </main>
 
@@ -456,88 +412,6 @@
   </dialog>
 
   <!-- what JS stamps out for a new issue -->
-  <template id="pm-tpl-note"><li><a class="pm-note" href="#/issues/ENG-142" data-router-link="" data-unread="">
-                <span class="pm-note-av"><span class="avatar pm-mini" data-size="sm"><span class="avatar-fallback"></span></span><span class="pm-note-icon"><i data-lucide="message-square"></i></span></span>
-                <span class="pm-note-body"><span><strong>Marco Rossi</strong> commented on <span class="pm-id">ENG-142</span></span><small>I can reproduce it in Safari too - the debounce alone fixes most of it.</small></span>
-                <time>12m</time>
-              </a></li></template><template id="pm-tpl-person"><li data-person="aron"><span class="avatar pm-mini" data-size="sm"><span class="avatar-fallback"></span></span><span>Aron Homberg</span><progress class="progress" max="3" value="0" aria-label="Aron Homberg: 0 of 3 done"></progress><small>0/3</small></li></template><template id="pm-tpl-project"><tr class="table-row">
-                  <th class="table-cell" scope="row"><span class="pm-proj"><i data-lucide="search"></i>Search 2.0</span></th>
-                  <td class="table-cell"><span class="badge pm-health" data-variant="outline" data-health="on"><span class="pm-dot"></span>On track</span></td>
-                  <td class="table-cell"><span class="pm-lead"><span class="avatar pm-mini" data-size="sm"><span class="avatar-fallback"></span></span>Marco Rossi</span></td>
-                  <td class="table-cell pm-muted">Nov 15</td>
-                  <td class="table-cell pm-muted">24</td>
-                  <td class="table-cell"><span class="pm-progress"><progress class="progress" max="100" value="68" aria-label="Search 2.0: 68%"></progress><small>68%</small></span></td>
-                </tr></template><template id="pm-tpl-row"><li class="pm-row" data-issue="ENG-000" data-status="todo" data-priority="none" data-assignee="" data-context-menu="pm-ctx">
-      <a class="pm-row-link" href="#/issues/ENG-000" data-router-link="">
-        <span class="pm-prio" aria-hidden="true"></span><span class="sr-only" data-f="prio">No priority</span>
-        <span class="pm-id" data-f="id">ENG-000</span>
-        <span class="pm-status" aria-hidden="true"></span>
-        <span class="pm-title" data-f="title"></span>
-        <span class="pm-labels" data-f="labels"></span>
-        <span class="pm-project" data-f="project-chip"></span>
-        <time class="pm-date" data-f="due">—</time>
-        <span class="avatar pm-assignee" data-size="sm" data-none=""><span class="sr-only">Unassigned</span></span>
-      </a>
-    </li></template>
-  <template id="pm-tpl-card"><a class="pm-card" href="#/issues/ENG-000" data-router-link="" draggable="true" data-issue="ENG-000" data-status="todo" data-priority="none" data-assignee="" data-context-menu="pm-ctx">
-      <span class="pm-card-top"><span class="pm-id" data-f="id">ENG-000</span><span class="avatar pm-assignee" data-size="sm" data-none=""><span class="sr-only">Unassigned</span></span></span>
-      <span class="pm-card-title"><span class="pm-status" aria-hidden="true"></span><span data-f="title"></span></span>
-      <span class="pm-card-meta"><span class="pm-prio" aria-hidden="true"></span><span data-f="labels"></span></span> </a></template>
-  <template id="pm-tpl-issue"><section class="pm-view pm-issue" id="ENG-000" hidden data-issue="ENG-000" data-status="todo" data-priority="none" data-assignee="" aria-label="ENG-000">
-      <header class="pm-head">
-        <button class="sidebar-trigger" type="button" data-sidebar-trigger="pm-sidebar" aria-label="Toggle sidebar" data-i18n-aria-label-en="Toggle sidebar" data-i18n-aria-label-de="Seitenleiste umschalten"><i data-lucide="panel-left"></i></button>
-        <button class="sidebar-trigger pm-mobile-trigger" type="button" data-sidebar-mobile="pm-mobile-nav" aria-label="Open navigation" data-i18n-aria-label-en="Open navigation" data-i18n-aria-label-de="Navigation öffnen"><i data-lucide="menu"></i></button>
-        <nav class="breadcrumb" aria-label="Breadcrumb"><ol class="breadcrumb-list">
-            <li class="breadcrumb-item"><a class="breadcrumb-link" href="#/" data-router-link="">Engineering</a></li>
-            <li class="breadcrumb-separator" aria-hidden="true">›</li>
-            <li class="breadcrumb-item"><span class="breadcrumb-page" aria-current="page" data-f="id">ENG-000</span></li>
-          </ol></nav>
-        <span class="pm-spacer"></span>
-        <a class="btn" data-variant="ghost" data-size="icon-sm" href="#/" data-router-link="" aria-label="Previous issue" data-pm-prev><i data-lucide="chevron-up"></i></a>
-        <a class="btn" data-variant="ghost" data-size="icon-sm" href="#/" data-router-link="" aria-label="Next issue" data-pm-next><i data-lucide="chevron-down"></i></a>
-        <button class="btn" data-variant="ghost" data-size="icon-sm" type="button" data-pm-copy="" aria-label="Copy issue link"><i data-lucide="link"></i></button>
-        <button class="btn pm-star" data-variant="ghost" data-size="icon-sm" type="button" aria-pressed="false" data-pm-star="" aria-label="Favorite"><i data-lucide="star"></i></button>
-      </header>
-      <div class="pm-issue-body">
-        <article class="pm-issue-main">
-          <h1 class="pm-issue-title" data-f="title"></h1>
-          <div class="pm-issue-desc" data-f="desc"></div>
-          <section class="pm-sub" aria-labelledby="ENG-000-sub">
-            <h2 id="ENG-000-sub">Sub-issues <span class="pm-sub-count" data-pm-sub-count>0/0</span></h2>
-            <ul class="pm-sub-list" data-pm-subs></ul>
-            <form class="pm-sub-form" data-pm-sub-new>
-              <input class="input" name="title" placeholder="Add a sub-issue…" aria-label="Sub-issue" autocomplete="off" required />
-            </form>
-          </section>
-          <section class="pm-files" aria-labelledby="ENG-000-files">
-            <h2 id="ENG-000-files">Attachments</h2>
-            <ul class="pm-file-list" data-pm-files></ul>
-            <input class="file-input" type="file" data-pm-attach aria-label="Attach a file" />
-          </section>
-
-          <section class="pm-activity" aria-labelledby="ENG-000-act">
-            <h2 id="ENG-000-act">Activity</h2>
-            <ol class="pm-feed"></ol>
-            <form class="pm-comment-form" data-pm-comment="">
-              <span class="avatar pm-mini" data-size="sm"><span class="avatar-fallback"></span></span>
-              <div class="textarea-group">
-                <textarea class="textarea" data-rows="1" data-max-rows="6" name="body" placeholder="Leave a comment…" aria-label="Comment"></textarea>
-                <div class="textarea-group-actions"><button class="btn" data-size="sm" type="submit">Comment</button></div>
-              </div>
-            </form>
-          </section>
-        </article>
-        <aside class="pm-props" aria-label="Properties">
-          <div class="pm-prop"><span class="pm-prop-label" id="ENG-000-l-st">Status</span><span class="pm-prop-field"><span class="pm-status" aria-hidden="true"></span><select class="select" data-field="status" aria-labelledby="ENG-000-l-st"><option value="backlog">Backlog</option><option value="todo" selected>Todo</option><option value="progress">In Progress</option><option value="review">In Review</option><option value="done">Done</option></select></span></div>
-          <div class="pm-prop"><span class="pm-prop-label" id="ENG-000-l-pr">Priority</span><span class="pm-prop-field"><span class="pm-prio" aria-hidden="true"></span><select class="select" data-field="priority" aria-labelledby="ENG-000-l-pr"><option value="none" selected>No priority</option><option value="urgent">Urgent</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></span></div>
-          <div class="pm-prop"><span class="pm-prop-label" id="ENG-000-l-as">Assignee</span><span class="pm-prop-field"><span class="avatar pm-assignee" data-size="sm" data-none=""><span class="sr-only">Unassigned</span></span><select class="select" data-field="assignee" aria-labelledby="ENG-000-l-as"><option value="" selected>Unassigned</option><option value="aron">Aron Homberg</option><option value="anna">Anna Silva</option><option value="marco">Marco Rossi</option><option value="priya">Priya Natarajan</option><option value="hannah">Hannah Lee</option><option value="sophie">Sophie Tan</option></select></span></div>
-          <div class="pm-prop"><span class="pm-prop-label">Labels</span><span class="pm-prop-value" data-f="labels"></span></div>
-          <div class="pm-prop"><span class="pm-prop-label">Project</span><span class="pm-prop-value" data-f="project-chip"></span></div>
-          <div class="pm-prop"><span class="pm-prop-label">Cycle</span><span class="pm-prop-value"><i data-lucide="refresh-cw"></i><span data-f="cycle">—</span></span></div>
-          <div class="pm-prop"><span class="pm-prop-label">Due date</span><span class="pm-prop-value"><i data-lucide="calendar"></i><span data-f="due">—</span></span></div>
-        </aside>
-      </div>
-    </section></template>
   <!-- the translations: one template per target and language (defuss-i18n) -->
   <template data-i18n-for="nav-inbox-d" data-i18n-locale="en">Inbox</template>
   <template data-i18n-for="nav-inbox-d" data-i18n-locale="de">Posteingang</template>

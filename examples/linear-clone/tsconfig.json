@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2024",
-    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2024",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "module": "Preserve",
     "moduleResolution": "bundler",
     "moduleDetection": "force",
@@ -14,7 +18,15 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
-    "types": ["bun"]
+    "types": [
+      "bun"
+    ],
+    "jsx": "react-jsx",
+    "jsxImportSource": "defuss-morph"
   },
-  "include": ["src", "tests", "scripts"]
+  "include": [
+    "src",
+    "tests",
+    "scripts"
+  ]
 }

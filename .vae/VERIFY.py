@@ -71,8 +71,14 @@ RULES += [
                 " && grep -q \"version: \\\"$v\\\"\" scripts/e2e.ts && grep -qF \"defuss-backplane-$v.tgz\" scripts/e2e.ts"
                 " && grep -q \"serviceVersion: \\\"$v\\\"\" src/telemetry.ts",
      "claim": "the MCP server version, the telemetry service version and the packed-consumer tarball follow package.json"},
-    # The repository has one gate, so the example's own verbs run here. Its e2e joins once the browser suite exists.
-    {"id": "linear-clone.verify", "kind": "command", "timeout_s": 900,
-     "command": "make -C examples/linear-clone setup lint test coverage",
-     "claim": "the linear-clone example installs from the packed backplane, lints, passes its tests and its coverage floor"},
+    # The repository has one gate, so the example's own verbs run here, its browser e2e included.
+    {"id": "linear-clone.verify", "kind": "command", "timeout_s": 1200,
+     "command": "make -C examples/linear-clone setup verify",
+     "claim": "the linear-clone example installs from the packed backplane, lints, passes its tests, its coverage floor"
+              " and its journey in Chromium, Firefox and WebKit against the built app"},
+    # The frontend renders JSX through defuss-morph and changes the shell through defuss-query (human requirement).
+    {"id": "linear-clone.morph-rendering", "kind": "not_regex", "glob": "examples/linear-clone/src/web/*.ts*",
+     "pattern": r"\.(?:innerHTML|outerHTML)\b|insertAdjacent(?:HTML|Element|Text)|\.replaceChildren\(|"
+                r"\bdocument\.createElement(?:NS)?\(|\.textContent\s*=|\.appendChild\(|\.(?:set|remove)Attribute\(",
+     "claim": "the frontend renders through defuss-morph and changes the DOM through defuss-query, not by hand"},
 ]

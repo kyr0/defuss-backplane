@@ -29,6 +29,7 @@ setup: ## install pinned tools, pack the backplane from the repository root, the
 	rm -rf $(BACKPLANE) && mkdir -p $(BACKPLANE)
 	tar xzf $(BACKPLANE_TGZ) -C $(BACKPLANE) --strip-components=1
 	bun install --frozen-lockfile
+	./node_modules/.bin/playwright-core install chromium firefox webkit
 
 build: ## bundle the server and the frontend into dist/
 	bun run build

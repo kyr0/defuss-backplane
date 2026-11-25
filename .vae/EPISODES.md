@@ -43,28 +43,17 @@ Wrap: EVERY lead becomes a test | .vae/VERIFY.py rule | one MEMORY line with BC,
 2026-11-25T00:34:14Z s=dcdb118f FINDING src/client.ts:1 and ARCH.md:8 (reuse decision) learn=none: VERIFIED: the rationale now matches observed behaviour of the released versions.
 2026-11-25T00:34:14Z s=dcdb118f FINDING ARCH.md:45 B09 learn=none: VERIFIED: claim removed with its basis.
 2026-11-25T00:34:14Z s=dcdb118f FINDING plans/2026-11-24_22-24_linear-clone-example.md:20,21,41-43 B09 learn=none: VERIFIED: plan facts match npm.
-2026-11-25T01:42:45Z s=dcdb118f DONE fp=54dc84de7de1 cov=98.0% paths=ARCH.md,CHANGELOG.md,bun.lock,package.json(+3)
-2026-11-25T01:42:45Z s=dcdb118f FINDING src/client.ts:connectBackplane learn=test: VERIFIED: tests/client.test.ts adds the isolation, wrong-key and redirect contracts; the existing suite covers every module through the client.
-2026-11-25T01:42:45Z s=dcdb118f FINDING src/client.ts redirect guard (security) learn=test: VERIFIED: 'a call answered with a redirect fails, so its arguments never reach another address' fails without the guard.
 2026-11-25T01:42:45Z s=dcdb118f FINDING ARCH.md:8 B01 (own claim corrected) learn=none: VERIFIED: claim narrowed to the probe result.
 2026-11-25T01:42:45Z s=dcdb118f FINDING tests/client.test.ts:28 learn=none: VERIFIED: matches the error table.
 2026-11-25T01:42:45Z s=dcdb118f FINDING src/client.ts connect cost learn=none: VERIFIED: accepted cost; a context API exposing its cached schema would remove it.
-2026-11-25T02:59:17Z s=dcdb118f DONE fp=41e758ab1c76 cov=98.0% paths=ARCH.md,CHANGELOG.md,bun.lock,package.json(+3)
-2026-11-25T02:59:17Z s=dcdb118f FINDING src/client.ts:createRpcContext fetch learn=test: VERIFIED: tests/client.test.ts covers calls and the schema request.
-2026-11-25T02:59:17Z s=dcdb118f FINDING src/client.ts:getRpcClient({ schema }) learn=test: VERIFIED: 'a connection sends one schema request and refuses a redirected one'.
 2026-11-25T02:59:17Z s=dcdb118f FINDING src/client.ts VFS upload (own earlier claim) learn=none: VERIFIED: read the code.
 2026-11-25T02:59:17Z s=dcdb118f FINDING plans/2026-11-24_22-24_linear-clone-example.md:42 B01 learn=none: VERIFIED: probe repeated on the named versions.
-2026-11-25T02:59:17Z s=dcdb118f FINDING package.json learn=test: VERIFIED: the suite and e2e cover every client path.
-2026-11-25T04:57:07Z s=dcdb118f DONE fp=fc0e7b7cf383 cov=98.0% paths=examples/linear-clone/Makefile,examples/linear-clone/bun.lock,examples/linear-clone/bunfig.toml,examples/linear-clone/package.json(+4)
 2026-11-25T04:57:07Z s=dcdb118f FINDING examples/linear-clone/Makefile:setup (plan decision 3) learn=none: VERIFIED: rm -rf node_modules deps && make setup passes; plan decision 3 updated.
 2026-11-25T04:57:07Z s=dcdb118f FINDING plans/2026-11-24_22-24_linear-clone-example.md B01 (own earlier claim) learn=none: VERIFIED: stat inode comparison.
 2026-11-25T04:57:07Z s=dcdb118f FINDING .vae/VERIFY.py:linear-clone.verify (plan decision 4) learn=none: VERIFIED: the gate executes the rule.
-2026-11-25T04:57:07Z s=dcdb118f FINDING examples/linear-clone/src/server/config.ts:loadConfig learn=test: VERIFIED: tests/config.test.ts covers defaults, every key of .env.example, empty values and each invalid value; 100 % lines.
 2026-11-25T04:57:07Z s=dcdb118f FINDING examples/linear-clone/package.json learn=none: VERIFIED: package check VERIFIED in vae.py verify --json.
 2026-11-25T04:57:07Z s=dcdb118f FINDING examples/linear-clone/Makefile recipes (runtime) learn=none: UNKNOWN: whether recipes should run through mise exec; not requested.
 2026-11-25T04:57:07Z s=dcdb118f FINDING examples/linear-clone/Makefile:2 and .env.example (own claim corrected) learn=none: VERIFIED: probe outputs K1..K9 recorded; documentation corrected.
-2026-11-25T05:05:59Z s=dcdb118f DONE fp=4c24fca2ed89 cov=98.5% paths=examples/linear-clone/src/core/dates.ts,examples/linear-clone/src/core/digest.ts,examples/linear-clone/src/core/ids.ts,examples/linear-clone/src/core/issue.ts(+4)
-2026-11-25T05:05:59Z s=dcdb118f FINDING examples/linear-clone/src/core/issue.ts:validateDraft|validatePatch learn=test: VERIFIED: tests/core.test.ts drafts and patches cover each field's error path.
 2026-11-25T05:05:59Z s=dcdb118f FINDING examples/linear-clone/src/core/issue.ts:applyPatch learn=test: VERIFIED: tests cover done, reopen and no-op patches.
 2026-11-25T05:05:59Z s=dcdb118f FINDING examples/linear-clone/src/core/stats.ts:cycleStats learn=test: VERIFIED: tests match the scaffold's formulas with real values.
 2026-11-25T05:05:59Z s=dcdb118f FINDING examples/linear-clone/src/core/digest.ts:dueDigest learn=test: VERIFIED: tests cover done, unassigned and future issues.
@@ -106,3 +95,14 @@ Wrap: EVERY lead becomes a test | .vae/VERIFY.py rule | one MEMORY line with BC,
 2026-11-25T05:53:40Z s=dcdb118f FINDING examples/linear-clone/src/web/views/cycles.ts learn=none: VERIFIED: the cycles screenshot shows 15 scope, 8 started, 3 completed, 9 of 14 days left.
 2026-11-25T05:53:40Z s=dcdb118f FINDING examples/linear-clone/src/web/main.ts learn=test: VERIFIED: routes pass in three browsers without console errors; interactions are covered by M7.
 2026-11-25T05:53:40Z s=dcdb118f FINDING examples/linear-clone/src/core/stats.ts:currentCycle, src/core/ids.ts:uploadIdOf learn=test: VERIFIED: api and jobs tests pass.
+2026-11-25T06:13:53Z s=dcdb118f DONE fp=2023d7cde4d3 cov=98.0% paths=examples/linear-clone/Makefile,examples/linear-clone/bun.lock,examples/linear-clone/package.json,examples/linear-clone/scripts/build.ts(+25)
+2026-11-25T06:13:53Z s=dcdb118f FINDING examples/linear-clone/src/web (rendering) learn=verifier: VERIFIED: rule linear-clone.morph-rendering (not_regex over src/web) rejects hand-written DOM writes; grep finds none; e2e 20/20 passes.
+2026-11-25T06:13:53Z s=dcdb118f FINDING examples/linear-clone/src/web/actions.ts:write learn=test: VERIFIED: the e2e step changes status, priority and assignee back to back and expects all three events and values after reload.
+2026-11-25T06:13:53Z s=dcdb118f FINDING examples/linear-clone/src/web/views/inbox.tsx:data-unread learn=memory: VERIFIED: e2e inbox step passes; MEMORY line records the morph rule.
+2026-11-25T06:13:53Z s=dcdb118f FINDING examples/linear-clone/src/web/tracker.css:.pm-projects learn=test: VERIFIED: e2e projects step sees 5 visible rows.
+2026-11-25T06:13:53Z s=dcdb118f FINDING examples/linear-clone/scripts/e2e.ts:viewport learn=test: VERIFIED: drag and drop step passes and persists after reload.
+2026-11-25T06:13:53Z s=dcdb118f FINDING examples/linear-clone/scripts/e2e.ts:probe 404 learn=test: VERIFIED: read in ../defuss-rpc src/client.ts and src/server.ts; the e2e attachment step passes.
+2026-11-25T06:13:53Z s=dcdb118f FINDING examples/linear-clone/scripts/e2e.ts:create wait learn=test: VERIFIED: create passes in Chromium, Firefox and WebKit.
+2026-11-25T06:13:53Z s=dcdb118f FINDING examples/linear-clone/src/web/icons.tsx learn=test: VERIFIED: e2e routes step fails on any leftover i[data-lucide]; build log sizes.
+2026-11-25T06:13:53Z s=dcdb118f FINDING examples/linear-clone/src/web/views/issue.tsx:star learn=none: VERIFIED: rendered from store.starred; no persistence was ever specified (scaffold shows only a toast).
+2026-11-25T06:13:53Z s=dcdb118f FINDING examples/linear-clone/Makefile + .vae/VERIFY.py learn=verifier: VERIFIED: gate verify passed with the widened rule.

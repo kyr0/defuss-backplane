@@ -29,7 +29,7 @@ await bundle({
   sourcemap: "linked",
 });
 await bundle({
-  entrypoints: [join(root, "src/web/main.ts")],
+  entrypoints: [join(root, "src/web/main.tsx")],
   outdir: join(dist, "public"),
   target: "browser",
   format: "esm",
