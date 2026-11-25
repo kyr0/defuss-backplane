@@ -1,6 +1,6 @@
 # Plan: the linear-clone example app
 
-Status: in progress. M0 to M3 are done.
+Status: in progress. M0 to M4 are done.
 
 Tick a milestone `- [x]` when its proof passes, then run `verify` on its scope.
 
@@ -121,7 +121,8 @@ flowchart LR
   - VERIFIED: a streaming upload handler that threw without reading left defuss-rpc 4.3.0's temp file open, and Bun failed with "A FileHandle object was closed during garbage collection". The guard now refuses a missing issue, a bad name or an announced size above 25 MiB with 403 before the bytes arrive. The root cause is fixed in defuss-rpc 4.3.1 (built locally, not yet on npm); the app moves to it once it is published.
   - `TIME_ZONE` (default `UTC`) joins the configuration: today, due dates and cycle days follow its calendar.
   - Proof: tests through the real defuss-rpc client and the official MCP client. Every API method is called once, with its main error. `Jobs` is absent from MCP. SIGTERM exits with 0. Each invalid configuration value fails startup.
-- [ ] **M4 Schedules.**
+- [x] **M4 Schedules.**
+  - `DIGEST_CRON` (default `0 9 * * *`) and `ROLLOVER_CRON` (default `0 0 * * 1`) join the configuration and run in `TIME_ZONE`. Changes the jobs make carry the actor `system`. The rollover carries the open issues before it closes the cycle, so a call that stops halfway is completed by the next one.
   - `src/server/jobs.ts`: upsert both schedules, the guard, `dueDigest` and `cycleRollover` on top of the core.
   - Proof:
     - a `Jobs` call without the key answers 403, and with it runs;

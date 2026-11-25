@@ -14,6 +14,9 @@ export type Config = {
   viewer: string;
   /** `TIME_ZONE`: the IANA zone whose calendar decides today, due dates and cycle days. */
   timeZone: string;
+  /** `DIGEST_CRON` and `ROLLOVER_CRON`: when the backplane runs the due digest and the cycle rollover, in `timeZone`. */
+  digestCron: string;
+  rolloverCron: string;
 };
 
 type Env = Record<string, string | undefined>;
@@ -38,7 +41,12 @@ export function loadConfig(env: Env = process.env): Config {
     workspace: read(env, "WORKSPACE", "vector"),
     viewer: read(env, "VIEWER", "aron"),
     timeZone: read(env, "TIME_ZONE", "UTC"),
+    digestCron: read(env, "DIGEST_CRON", "0 9 * * *"),
+    rolloverCron: read(env, "ROLLOVER_CRON", "0 0 * * 1"),
   };
+  // The scheduler checks the fields when the schedule is created; this catches a value that is no cron at all.
+  for (const [key, cron] of [["DIGEST_CRON", config.digestCron], ["ROLLOVER_CRON", config.rolloverCron]] as const)
+    if (!/^\S+( \S+){4,5}$/.test(cron)) problems.push(key + " must be a cron expression of 5 or 6 fields");
   // VERIFIED: the daemon's own rule for its API_KEY (defuss-backplane src/config.ts).
   if (!config.backplaneApiKey) problems.push("BACKPLANE_API_KEY is required: the daemon's API_KEY");
   else if (!/^[\x21-\x7e]+$/.test(config.backplaneApiKey))

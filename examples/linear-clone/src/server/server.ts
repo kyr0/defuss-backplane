@@ -13,6 +13,7 @@ import { validateFileName } from "../core/issue.ts";
 import type { Seed } from "../core/seed.ts";
 import { createApi, faultOf } from "./api.ts";
 import type { Config } from "./config.ts";
+import { jobsGuard, schedules, upsertSchedules } from "./jobs.ts";
 import { openWorkspace } from "./workspace.ts";
 
 /** Attachments are at most 25 MiB. The guard checks the size the client announces; the handler checks the bytes. */
@@ -50,6 +51,7 @@ export async function startServer(config: Config, options: { publicDir: string; 
   // guard: it runs before the upload is stored, and a streaming handler that throws without reading its stream leaves
   // defuss-rpc 4.3.0's temp file handle open (VERIFIED: Bun then fails with "A FileHandle object was closed during
   // garbage collection"). A refused upload answers 403.
+  rpc.addHook({ phase: "guard", fn: jobsGuard(config.backplaneApiKey) });
   rpc.addHook({
     phase: "guard",
     fn: async (namespace, method, args, request) => {
@@ -91,7 +93,7 @@ export async function startServer(config: Config, options: { publicDir: string; 
   });
   const route = ({ request }: { request: Request }) => withStatus(rpc.fetch(request));
   const tools = createMcpApi({ name: "linear-clone", version });
-  await exposeRpc(tools, route, { codec: "json" });
+  await exposeRpc(tools, route, { codec: "json", include: (namespace) => namespace !== "Jobs" });
   const mcp = createMcpHttp(tools, { mode: "json", allowedOrigins: [] });
   const server = createServer({
     host: "127.0.0.1",
@@ -108,6 +110,15 @@ export async function startServer(config: Config, options: { publicDir: string; 
     throw error;
   }
   const url = "http://127.0.0.1:" + server.port;
+  try {
+    // The callbacks carry the app's URL, so the schedules follow the port of this start.
+    const outcome = await upsertSchedules(ws.scheduler, url + "/rpc", config.timeZone, schedules(config));
+    log.info("schedules", outcome);
+  } catch (error) {
+    await server.stop();
+    await Promise.all([rpc.close(), mcp.close(), ws.close()]);
+    throw error;
+  }
   log.info("listening", { url, workspace: config.workspace, viewer: config.viewer });
   return {
     url,

@@ -12,6 +12,8 @@ test("only the bot key is required; every other key has a default", () => {
     workspace: "vector",
     viewer: "aron",
     timeZone: "UTC",
+    digestCron: "0 9 * * *",
+    rolloverCron: "0 0 * * 1",
   });
 });
 
@@ -20,9 +22,9 @@ test("the keys of .env.example, filled in, configure the service", () => {
     readFileSync(new URL("../.env.example", import.meta.url), "utf8")
       .split("\n")
       .filter((line) => /^[A-Z_]+=/.test(line))
-      .map((line) => line.split("=", 2) as [string, string]),
+      .map((line) => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)] as [string, string]),
   );
-  expect(Object.keys(example).sort()).toEqual(["BACKPLANE_API_KEY", "BACKPLANE_PORT", "PORT", "TIME_ZONE", "VIEWER", "WORKSPACE"]);
+  expect(Object.keys(example).sort()).toEqual(["BACKPLANE_API_KEY", "BACKPLANE_PORT", "DIGEST_CRON", "PORT", "ROLLOVER_CRON", "TIME_ZONE", "VIEWER", "WORKSPACE"]);
   const config = loadConfig({ ...example, ...key, PORT: "8080", WORKSPACE: "Café Ops", VIEWER: "anna", TIME_ZONE: "Europe/Berlin" });
   expect(config).toMatchObject({ port: 8080, backplanePort: 43127, workspace: "Café Ops", viewer: "anna", timeZone: "Europe/Berlin" });
 });
@@ -46,6 +48,8 @@ test.each([
   // 25 characters, 50 bytes: the limit counts bytes.
   [{ WORKSPACE: "ü".repeat(25) }, "WORKSPACE must have at most 48 UTF-8 bytes"],
   [{ TIME_ZONE: "Mars/Olympus" }, "TIME_ZONE must be an IANA time zone such as Europe/Berlin"],
+  [{ DIGEST_CRON: "daily" }, "DIGEST_CRON must be a cron expression of 5 or 6 fields"],
+  [{ ROLLOVER_CRON: "0 0 * *" }, "ROLLOVER_CRON must be a cron expression of 5 or 6 fields"],
 ])("%p fails startup with %p", (overrides, message) => {
   expect(() => loadConfig({ ...key, ...overrides })).toThrow(message);
 });

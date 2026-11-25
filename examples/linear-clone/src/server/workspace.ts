@@ -299,6 +299,12 @@ export async function openWorkspace(options: {
     },
     cycles: {
       list: () => all(cycles, { sorters: [{ field: "number", direction: "asc" }] }),
+      /** Inserts a cycle with a fixed ID; false when it exists. */
+      create: (cycle: Cycle) => insertOnce(cycles, cycle),
+      async close(id: string) {
+        await cycles.update(id, { closed: true });
+        await forgetStats(id);
+      },
       /** The cycle's statistics, from the cache when an earlier call stored them and no issue write cleared them. */
       async stats(id: string): Promise<CycleStats> {
         const cached = await stats.get("stats:" + id);

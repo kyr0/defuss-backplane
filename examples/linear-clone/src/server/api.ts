@@ -6,6 +6,7 @@ import { type Fault, faultMessage } from "../core/faults.ts";
 import { parseIssueId } from "../core/ids.ts";
 import { type Fields, InvalidInput } from "../core/issue.ts";
 import type { Cycle } from "../core/stats.ts";
+import { createJobs } from "./jobs.ts";
 import type { Log } from "./log.ts";
 import { NotFound, type Workspace } from "./workspace.ts";
 
@@ -107,6 +108,8 @@ export function createApi({ ws, viewer, workspace, timeZone, log }: ApiContext) 
       },
       stats: (id: string) => ws.cycles.stats(id),
     },
+    /** Called by the backplane's scheduler with the bot key; a guard refuses every other caller, and MCP leaves them out. */
+    Jobs: createJobs(ws),
   };
   return withFaults(api, log);
 }
