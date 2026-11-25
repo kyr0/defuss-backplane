@@ -1,0 +1,25 @@
+{
+  "name": "linear-clone",
+  "version": "0.1.0",
+  "description": "An issue tracker in the style of Linear: a Bun app service on defuss-serve that keeps its data in defuss-backplane.",
+  "author": "Aron Homberg",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.4.5",
+  "scripts": {
+    "lint": "oxlint --deny-warnings src tests && tsc --noEmit",
+    "test": "bun test tests"
+  },
+  "dependencies": {
+    "defuss-backplane": "file:./deps/defuss-backplane",
+    "defuss-mcp": "0.6.2",
+    "defuss-rpc": "4.3.0",
+    "defuss-serve": "0.4.0"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.5",
+    "oxlint": "1.94.0",
+    "typescript": "5.9.3"
+  }
+}

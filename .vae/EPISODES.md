@@ -9,24 +9,16 @@ Wrap: EVERY lead becomes a test | .vae/VERIFY.py rule | one MEMORY line with BC,
 2026-11-22T13:17:58Z s=dcdb118f FINDING src/tools.ts tool() doc; CHANGELOG.md Unreleased learn=none: Wording precision in self-written docs; not mechanically checkable.
 2026-11-22T15:08:18Z s=dcdb118f FINDING package.json:4 description learn=none: Product positioning wording chosen by the human; not mechanically checkable.
 2026-11-22T15:38:35Z s=dcdb118f FINDING src/server.ts server.timeout learn=none: Runtime behaviour recorded in ARCH.md; no rule can check an absent timeout.
-2026-11-22T15:38:35Z s=dcdb118f FINDING src/vfs.ts download learn=test: tests/vfs.test.ts eviction test; mutating the lease to release immediately made it fail (1 fail), restoring it passes.
-2026-11-22T15:38:35Z s=dcdb118f FINDING src/server.ts close createRpcServer({}) learn=test: tests/http.test.ts starts a second daemon in the same process and exercises its VFS service.
-2026-11-22T15:38:35Z s=dcdb118f FINDING src/client.ts UploadBody learn=test: scripts/consumer-vfs.ts uploads with createReadStream under the packed declarations and both runtimes.
 2026-11-22T15:38:35Z s=dcdb118f FINDING scripts/consumer-vfs.ts checkVfs learn=none: Test-script completeness; no mechanical rule.
 2026-11-22T15:38:35Z s=dcdb118f FINDING src/vfs.ts INLINE_LIMIT; src/tools.ts Adapter.output learn=none: Minor API hygiene.
 2026-11-22T15:38:35Z s=dcdb118f FINDING README.md Errors table B/P learn=none: Doc completeness against an enum; a future enum change shows in review.
 2026-11-22T15:38:35Z s=dcdb118f FINDING package.json:4 description learn=none: Product positioning, not mechanically checkable.
 2026-11-22T15:38:35Z s=dcdb118f FINDING src/server.ts:1 file comment learn=none: Comment accuracy; not mechanically checkable.
-2026-11-22T15:48:29Z s=dcdb118f DONE fp=554a09784390 cov=98.6% paths=.github/workflows/verify.yml,AGENTS.md,ARCH.md,CHANGELOG.md(+35)
 2026-11-22T15:48:29Z s=dcdb118f FINDING README.md:3 B01/P learn=none: Human-chosen product wording; not mechanically checkable.
-2026-11-22T21:44:39Z s=dcdb118f DONE fp=ec12708bd2a6 cov=96.9% paths=ARCH.md,CHANGELOG.md,README.md,bun.lock(+14)
-2026-11-22T21:44:39Z s=dcdb118f FINDING src/server.ts:55 createRpcServer scheduler learn=test: tests/scheduler.test.ts asserts ALREADY_EXISTS 409, NOT_FOUND 404, INVALID_ARGUMENT 400 and MCP REVISION_CONFLICT 409.
 2026-11-22T21:44:39Z s=dcdb118f FINDING tests/daemon.ts:37 start learn=none: Test-harness isolation; the e2e already strips the variable from the daemon env.
 2026-11-22T21:44:39Z s=dcdb118f FINDING README.md:89 B01/P learn=none: Wording precision; not mechanically checkable.
 2026-11-22T21:44:39Z s=dcdb118f FINDING ARCH.md Scheduling P learn=none: Wording precision; not mechanically checkable.
 2026-11-22T21:44:39Z s=dcdb118f FINDING package.json:56 defuss-scheduler file:../defuss-scheduler learn=none: Depends on a human release decision for defuss-scheduler.
-2026-11-23T21:01:51Z s=dcdb118f DONE fp=2f559d207432 cov=98.8% paths=ARCH.md,CHANGELOG.md,README.md,bun.lock(+14)
-2026-11-23T21:01:51Z s=dcdb118f FINDING package.json:56 devDependencies.defuss-scheduler learn=verifier: VERIFIED: rule backplane.registry-deps in .vae/VERIFY.py rejects file:, link: and portal: specifiers in package.json.
 2026-11-23T21:01:51Z s=dcdb118f FINDING ARCH.md:10, ARCH.md:68 B01/P learn=none: VERIFIED: wording against an upstream document; no rule kind can check it.
 2026-11-23T21:01:51Z s=dcdb118f FINDING README.md:15, README.md:112, README.md:202, CHANGELOG.md:5 learn=verifier: VERIFIED: the same backplane.registry-deps rule removes the condition these sentences described.
 2026-11-23T21:01:51Z s=dcdb118f FINDING src/tools.ts:446 schedulerTools history comment learn=none: VERIFIED: comment wording against an upstream document; no rule kind can check it.
@@ -106,3 +98,11 @@ Wrap: EVERY lead becomes a test | .vae/VERIFY.py rule | one MEMORY line with BC,
 2026-11-25T02:59:17Z s=dcdb118f FINDING src/client.ts VFS upload (own earlier claim) learn=none: VERIFIED: read the code.
 2026-11-25T02:59:17Z s=dcdb118f FINDING plans/2026-11-24_22-24_linear-clone-example.md:42 B01 learn=none: VERIFIED: probe repeated on the named versions.
 2026-11-25T02:59:17Z s=dcdb118f FINDING package.json learn=test: VERIFIED: the suite and e2e cover every client path.
+2026-11-25T04:57:07Z s=dcdb118f DONE fp=fc0e7b7cf383 cov=98.0% paths=examples/linear-clone/Makefile,examples/linear-clone/bun.lock,examples/linear-clone/bunfig.toml,examples/linear-clone/package.json(+4)
+2026-11-25T04:57:07Z s=dcdb118f FINDING examples/linear-clone/Makefile:setup (plan decision 3) learn=none: VERIFIED: rm -rf node_modules deps && make setup passes; plan decision 3 updated.
+2026-11-25T04:57:07Z s=dcdb118f FINDING plans/2026-11-24_22-24_linear-clone-example.md B01 (own earlier claim) learn=none: VERIFIED: stat inode comparison.
+2026-11-25T04:57:07Z s=dcdb118f FINDING .vae/VERIFY.py:linear-clone.verify (plan decision 4) learn=none: VERIFIED: the gate executes the rule.
+2026-11-25T04:57:07Z s=dcdb118f FINDING examples/linear-clone/src/server/config.ts:loadConfig learn=test: VERIFIED: tests/config.test.ts covers defaults, every key of .env.example, empty values and each invalid value; 100 % lines.
+2026-11-25T04:57:07Z s=dcdb118f FINDING examples/linear-clone/package.json learn=none: VERIFIED: package check VERIFIED in vae.py verify --json.
+2026-11-25T04:57:07Z s=dcdb118f FINDING examples/linear-clone/Makefile recipes (runtime) learn=none: UNKNOWN: whether recipes should run through mise exec; not requested.
+2026-11-25T04:57:07Z s=dcdb118f FINDING examples/linear-clone/Makefile:2 and .env.example (own claim corrected) learn=none: VERIFIED: probe outputs K1..K9 recorded; documentation corrected.

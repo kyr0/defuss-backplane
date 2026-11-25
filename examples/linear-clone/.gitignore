@@ -1,0 +1,9 @@
+# The root .gitignore covers node_modules, dist and .env everywhere, but var/, tmp/, output/ and input/ only at the
+# repository root.
+/var/
+/tmp/
+/output/
+/input/*
+!/input/seed.json
+# The backplane package that `make setup` extracts from the root's packed tarball.
+/deps/

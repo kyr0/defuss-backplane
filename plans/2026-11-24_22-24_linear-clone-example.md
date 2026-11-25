@@ -1,6 +1,6 @@
 # Plan: the linear-clone example app
 
-Status: proposed, waiting for review. Nothing is implemented yet.
+Status: in progress. M0 is done.
 
 Tick a milestone `- [x]` when its proof passes, then run `verify` on its scope.
 
@@ -20,8 +20,11 @@ Tick a milestone `- [x]` when its proof passes, then run `verify` on its scope.
 - VERIFIED by `tests/client.test.ts` of the backplane: `defuss-backplane/client` runs each connection on a defuss-rpc 4.3.0 client context, so an application's `addHook()` and `setHeaders()` do not reach backplane calls, and it refuses redirects that would carry the bot key elsewhere.
 - VERIFIED: defuss-mcp 0.6.2 exports `defuss-mcp/rpc`. Its README says the `exposeRpc` bridge re-enters the RPC dispatcher, so RPC guards also cover MCP calls.
 - VERIFIED: npm has defuss-backplane 0.2.0 only. The `_rpc` callbacks exist in the repo's unreleased 0.3.0.
-- VERIFIED by probe on Bun 1.4.3, the shell's Bun, while `mise.toml` pins 1.4.5: a `file:` dependency installs as one symlink per file at install time. A later edit to an existing file shows through; a new file does not until the next install. pkgroll names a chunk by hash (`dist/config-DCePkTcq.js`).
-- VERIFIED by probe on Bun 1.4.3: `coverageThreshold = 0.6` under `[test]` in `bunfig.toml` makes `bun test --coverage` exit 1 below the floor.
+- VERIFIED by probe on Bun 1.4.5, the `mise.toml` pin:
+  - A `file:` directory dependency installs as hard links, one per file. An edit in place shows through. A recreated file, as `pkgroll --clean-dist` writes, and a new file show only after the next `bun install --frozen-lockfile`, which re-links them. pkgroll names a chunk by hash (`dist/config-DCePkTcq.js`).
+  - `file:../..` links the whole repository, 42 MB with `var/`, `tmp/`, `node_modules/` and the example itself.
+  - A tarball dependency kept its first content after a repack, under a frozen install and after deleting `node_modules`.
+- VERIFIED by probe on Bun 1.4.5: `coverageThreshold = 0.6` under `[test]` in `bunfig.toml` makes `bun test --coverage` exit 1 below the floor. `bun test` without test files exits 1.
 - VERIFIED from `vae.py:51`: `--repo` resolves to the git toplevel, so the whole repository has one gate. A `command` rule runs on every gate. A `glob` scope applies only to file rules (`vae_verify.py:run_custom_rule`).
 - VERIFIED with `git check-ignore`: the root `.gitignore` covers `node_modules`, `dist` and `.env` everywhere. It covers `var/`, `tmp/`, `output/` and `input/` only at the root.
 - VERIFIED: defuss-scheduler drives its browsers with `playwright-core` 1.65.1 from `scripts/e2e.ts`. The local Playwright cache holds the builds that version lists: chromium-1255, firefox-1572 and webkit-2388.
@@ -30,8 +33,8 @@ Tick a milestone `- [x]` when its proof passes, then run `verify` on its scope.
 
 1. **Rendering.** The frontend stays framework-free, as defuss-shadcn is. TypeScript modules stamp the scaffold's own `<template>`s from data. One template renders the issue page of the current route, in place of 16 pre-rendered pages. Alternative: the defuss JSX framework. Nobody asked for it, and it would mean rewriting markup that already works.
 2. **Backplane access.** The backend calls the backplane only through `defuss-backplane/client`, which is the defuss-rpc protocol with a per-connection bot key. It binds the app, tenant and bucket to each call, turns failures into `BackplaneError` codes and streams files over the backplane's VFS routes, none of which a plain client offers. The browser uses the stock `getRpcClient` against its own origin, which needs no key.
-3. **Backplane version.** The example depends on `"defuss-backplane": "file:../.."`, because the callbacks are not on npm. `make setup` builds the root first and then reinstalls, because of the symlink behaviour above. Once 0.3.0 is on npm, the example switches to the exact npm version.
-4. **Gate.** The repository has one gate, so the root `.vae/VERIFY.py` gets a `command` rule that runs `make -C examples/linear-clone verify` with a 900-second timeout. The alternative is to make the root verbs call the example's. That mixes two projects' verbs. HYPOTHESIS: the rule adds 2 to 4 minutes per root gate; falsifier: time the first run.
+3. **Backplane version.** The callbacks are not on npm, so the example depends on `"defuss-backplane": "file:./deps/defuss-backplane"`. `make setup` runs the root's `make pack`, extracts the tarball into the gitignored `deps/` and runs `bun install --frozen-lockfile`. The example thus installs only the published files, as an npm consumer would, and the install re-links them after each pack. Once 0.3.0 is on npm, the example switches to the exact npm version.
+4. **Gate.** The repository has one gate, so the root `.vae/VERIFY.py` gets the `command` rule `linear-clone.verify` with a 900-second timeout. It runs `make -C examples/linear-clone setup lint test coverage` and becomes `setup verify` in M7, when the example's e2e exists. A rule that ran `verify` from M0 on would fail every root gate until then. The alternative is to make the root verbs call the example's. That mixes two projects' verbs. HYPOTHESIS: the rule adds 2 to 4 minutes per root gate; falsifier: time the first run.
 5. **Coverage.** The example's `bunfig.toml` sets the 60 % floor, so its own `make test` fails closed. Coverage counts the backend and the pure core. The browser glue is proven by Playwright and not counted. ARCH.md states this.
 6. **Browsers.** `node scripts/e2e.ts` drives `playwright-core` 1.65.1, the same pin as defuss-scheduler. The full journey runs on Chromium. Firefox and WebKit open every route, check the console for errors and create one issue.
 7. **Workspace and viewer.** The backplane tenant is the workspace, `WORKSPACE` (default `vector`). Without auth, `VIEWER` names the person whom "My issues", comments and the activity feed refer to. When auth comes, the session replaces `VIEWER`.
@@ -87,14 +90,15 @@ flowchart LR
 
 ## Milestones
 
-- [ ] **M0 Project skeleton.**
+- [x] **M0 Project skeleton.**
   - Run `bun init` in `examples/linear-clone`.
   - `package.json`: `private`, `type: module`, `packageManager: bun@1.4.5`, the root's `mise.toml` pin, description, MIT, author, exact pins. The backplane already runs defuss-serve 0.4.0, defuss-rpc 4.3.0 and defuss-mcp 0.6.2, and the app pins the same.
-  - Add `tsconfig.json`, `bunfig.toml` with the coverage floor, a `.gitignore` for `var/ tmp/ output/ input/*` and `!input/seed.json`, `.env.example` and a `Makefile` with every VAE verb.
+  - Add `tsconfig.json`, `bunfig.toml` with the coverage floor, a `.gitignore` for `var/ tmp/ output/ input/* deps/` and `!input/seed.json`, `.env.example` and a `Makefile` with every VAE verb. `metrics`, `bench` and `e2e` exit 2 as UNKNOWN until their milestones.
+  - `src/server/config.ts`: `loadConfig(env)` for the keys of `.env.example`, `PORT`, `BACKPLANE_PORT`, `BACKPLANE_API_KEY`, `WORKSPACE` and `VIEWER`, with `tests/config.test.ts`. Lint needs a source file, and `.env.example` must match the keys the code reads. The default `VIEWER` is `aron`: VERIFIED from the scaffold script, "My issues" lists the rows assigned to `aron`.
   - Add the root rule from decision 4.
   - Repeat the two Bun probes above under the pinned 1.4.5.
-  - UNKNOWN: whether the gate's package check requires pkgroll for a private app with no library build; probe with the first gate run. If it does, the app build counts as the build, or the rule is narrowed, after asking.
-  - Proof: `make setup lint` passes, and the root gate runs the new rule.
+  - VERIFIED from `vae_repo.py:235`: the package check requires pkgroll only of a package that is not private and declares `exports`, `main` or `module`. The private app needs none.
+  - Proof: `make setup lint test coverage` passes, and the root gate runs the new rule.
 - [ ] **M1 Pure core.**
   - `src/core/issue.ts`: enums, rank order, `validateDraft` and `validatePatch` with length bounds.
   - `src/core/ids.ts`, `src/core/stats.ts` (scope, started, done, per assignee, burn-up), `src/core/digest.ts` (due on a date in a time zone), `src/core/rollover.ts`.

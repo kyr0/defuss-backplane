@@ -71,4 +71,8 @@ RULES += [
                 " && grep -q \"version: \\\"$v\\\"\" scripts/e2e.ts && grep -qF \"defuss-backplane-$v.tgz\" scripts/e2e.ts"
                 " && grep -q \"serviceVersion: \\\"$v\\\"\" src/telemetry.ts",
      "claim": "the MCP server version, the telemetry service version and the packed-consumer tarball follow package.json"},
+    # The repository has one gate, so the example's own verbs run here. Its e2e joins once the browser suite exists.
+    {"id": "linear-clone.verify", "kind": "command", "timeout_s": 900,
+     "command": "make -C examples/linear-clone setup lint test coverage",
+     "claim": "the linear-clone example installs from the packed backplane, lints, passes its tests and its coverage floor"},
 ]

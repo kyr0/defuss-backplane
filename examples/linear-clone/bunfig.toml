@@ -1,0 +1,4 @@
+[test]
+# VERIFIED by probe on Bun 1.4.5: below this share of covered lines or functions, `bun test --coverage` exits 1, so
+# `make coverage` fails closed.
+coverageThreshold = 0.6
