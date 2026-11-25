@@ -55,8 +55,6 @@ Wrap: EVERY lead becomes a test | .vae/VERIFY.py rule | one MEMORY line with BC,
 2026-11-25T04:57:07Z s=dcdb118f FINDING examples/linear-clone/Makefile recipes (runtime) learn=none: UNKNOWN: whether recipes should run through mise exec; not requested.
 2026-11-25T04:57:07Z s=dcdb118f FINDING examples/linear-clone/Makefile:2 and .env.example (own claim corrected) learn=none: VERIFIED: probe outputs K1..K9 recorded; documentation corrected.
 2026-11-25T05:19:11Z s=dcdb118f FINDING Makefile:test|coverage, package.json:scripts.test (root) learn=none: VERIFIED: bun test ./tests lists no examples/ file.
-2026-11-25T05:19:11Z s=dcdb118f FINDING examples/linear-clone/src/server/workspace.ts:events.list learn=test: VERIFIED: three consecutive runs of the suite pass with the fixed clock.
-2026-11-25T05:19:11Z s=dcdb118f FINDING examples/linear-clone/src/server/workspace.ts:nextNumber learn=test: VERIFIED: tests/workspace.test.ts.
 2026-11-25T05:19:11Z s=dcdb118f FINDING examples/linear-clone/src/server/workspace.ts:issues.update learn=test: VERIFIED: stale-revision test.
 2026-11-25T05:19:11Z s=dcdb118f FINDING examples/linear-clone/src/server/workspace.ts:seed learn=test: VERIFIED: seed tests, including deletion before a second seed.
 2026-11-25T05:19:11Z s=dcdb118f FINDING examples/linear-clone/src/server/workspace.ts:cycles.stats learn=test: VERIFIED: the test reads the cache through a second client.
@@ -106,3 +104,5 @@ Wrap: EVERY lead becomes a test | .vae/VERIFY.py rule | one MEMORY line with BC,
 2026-11-25T06:19:11Z s=dcdb118f FINDING examples/linear-clone/scripts/e2e.ts:comment draft learn=test: VERIFIED: make e2e 20/20 passes with the check.
 2026-11-25T06:19:11Z s=dcdb118f FINDING examples/linear-clone/ARCH.md claims learn=none: VERIFIED: workspace.ts audit calls, core/digest.ts filter, defuss-mcp dist/http line 40.
 2026-11-25T06:19:11Z s=dcdb118f FINDING examples/linear-clone/README.md startup claim learn=none: VERIFIED: test names in tests/cli.test.ts.
+2026-11-25T06:19:56Z s=dcdb118f DONE fp=eaf77618e2fe cov=98.0% paths=plans/2026-11-24_22-24_linear-clone-example.md
+2026-11-25T06:19:56Z s=dcdb118f FINDING plans/2026-11-24_22-24_linear-clone-example.md learn=none: VERIFIED: gate verify step VERIFIED in this run.

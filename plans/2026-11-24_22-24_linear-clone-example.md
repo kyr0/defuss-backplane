@@ -1,6 +1,6 @@
 # Plan: the linear-clone example app
 
-Status: in progress. M0 to M8 are done.
+Status: done. M0 to M9 are done.
 
 Tick a milestone `- [x]` when its proof passes, then run `verify` on its scope.
 
@@ -172,7 +172,7 @@ flowchart LR
   - Proof: `vae.py prose --fix` finds nothing; `make start status log stop` works against a running backplane.
   - VERIFIED: against a throwaway daemon, `make start` served the page, `status` reported running and then exit 3 after `stop`, `log` showed the ISO lines, and `metrics` printed `backplane_operation_duration` lines with `app="linear-clone"`.
   - VERIFIED: `make bench` measured `Issues.list` over 1,000 issues at 15.3 ms median and 18.6 ms p95 over 50 calls.
-- [ ] **M9 Gate.** Proof: `make -C examples/linear-clone verify` and the root gate pass.
+- [x] **M9 Gate.** Proof: `make -C examples/linear-clone verify` and the root gate pass. VERIFIED: the root rule `linear-clone.verify` runs the example's `setup verify`, browsers included, and the gate passes.
 
 M1 to M4 and M5 to M6 touch disjoint paths, and `type Api` from M3 is their contract. A parallel frontend unit is possible after M3. I recommend staying sequential. HYPOTHESIS: building the views changes the API; falsifier: the diff of `src/server/api.ts` during M5 and M6.
 
