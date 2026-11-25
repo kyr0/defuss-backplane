@@ -54,11 +54,12 @@ metrics: ## show the last package verification results
 bench: build ## time the isolated cross-runtime acceptance workload
 	@time $(MAKE) e2e
 
+# `./tests` is a path; a bare `tests` is a name filter that also matches examples/linear-clone/tests (VERIFIED).
 test: ## run storage, protocol and resource tests
-	bun test tests
+	bun test ./tests
 
 coverage: ## measure source line and function coverage
-	bun test --coverage tests
+	bun test --coverage ./tests
 
 lint: ## run oxlint and the strict TypeScript checker
 	bun run lint

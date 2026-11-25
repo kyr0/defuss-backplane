@@ -1,6 +1,6 @@
 # Plan: the linear-clone example app
 
-Status: in progress. M0 and M1 are done.
+Status: in progress. M0 to M2 are done.
 
 Tick a milestone `- [x]` when its proof passes, then run `verify` on its scope.
 
@@ -11,7 +11,7 @@ Tick a milestone `- [x]` when its proof passes, then run `verify` on its scope.
 ## What the plan stands on
 
 - VERIFIED: the scaffold is `src/documentation/pages/application/scaffold-issue-tracker.mdx` in defuss-shadcn, 7304 lines. Lines 21 to 1421 hold its own CSS, 1422 to 6725 the markup, 6726 to 7235 a classic script and 7236 to 7285 a module script.
-- VERIFIED: the markup pre-renders 16 issues, each as a list row, a board card and its own issue page. The views are `issues` (list, board and data grid), `my-issues`, `inbox`, `cycles` and `projects`. There is a context menu `#pm-ctx`, a command palette `#pm-cmd` and a create dialog `#pm-create`. The templates `pm-tpl-row`, `pm-tpl-card` and `pm-tpl-issue` stamp new issues. The i18n catalog is a set of `<template data-i18n-for>` elements for English and German.
+- VERIFIED by parsing the markup with linkedom: it pre-renders 15 issues, ENG-128 to ENG-142, each as a list row, a board card and its own issue page. The views are `issues` (list, board and data grid), `my-issues`, `inbox`, `cycles` and `projects`. There is a context menu `#pm-ctx`, a command palette `#pm-cmd` and a create dialog `#pm-create`. The templates `pm-tpl-row`, `pm-tpl-card` and `pm-tpl-issue` stamp new issues. The i18n catalog is a set of `<template data-i18n-for>` elements for English and German.
 - VERIFIED: the module script routes in hash mode with defuss-dom-router 0.1.1 (`#/`, `#/my-issues`, `#/inbox`, `#/cycles`, `#/projects`, `#/issues/:id`, `*`). It translates the shell with defuss-i18n 0.2.0 (`createI18n`, `createDomI18n(df$)`). It takes `df$` from the component bundle.
 - VERIFIED from the npm tarball: defuss-shadcn 0.10.0 ships `dist/apps/issue-tracker/issue-tracker.min.{css,js}`, the per-component files under `dist/components` and the scaffold `.mdx`. VERIFIED from `scripts/lib/apps.ts` in defuss-shadcn: an app bundle is the core plus exactly the components the app uses. It holds neither the scaffold's `.pm` styles nor the router or i18n.
 - VERIFIED: the scaffold's script loads one avatar from `https://github.com/kyr0.png` and the others from the documentation site's `images/avatars/`. defuss-shadcn's integration guide, `dist/SKILL.md`, loads Lucide from unpkg. The npm package ships no avatar images.
@@ -45,7 +45,7 @@ Tick a milestone `- [x]` when its proof passes, then run `verify` on its scope.
     - VERIFIED by probe on 2026-11-25, with defuss-mcp 0.6.2, defuss-rpc 4.3.0 and defuss-serve 0.4.0 driven by the official MCP client. Only the included tool was listed, a call returned its result as JSON, and the RPC guard ran with the MCP request's headers.
     - The app's schema is open, so the bridge needs no `discoveryHeaders`, which defuss-mcp 0.6.2 offers for a guarded schema.
 12. **No third-party requests.** Lucide comes from npm and is bundled. Avatars show initials. The seed keeps the scaffold's names and content.
-13. **Seed.** On first start, an empty workspace gets `input/seed.json`: the scaffold's 16 issues, people, the ENG team, projects, cycles and inbox items. The file is committed with `!input/seed.json`. Inserts that fail with `ALREADY_EXISTS` are skipped, so seeding can repeat.
+13. **Seed.** On first start, an empty workspace gets `input/seed.json`: the scaffold's 15 issues with their descriptions, sub-issues, comments and activity, 6 people, the ENG team, 5 projects, Cycle 24 and 6 inbox items. A one-off extraction parsed the scaffold markup; the file is committed with `!input/seed.json`. The seed is written for 2026-10-03, the day the scaffold's cycle view shows, and seeding moves every date by the days since then, so the demo cycle is running. A workspace that has a team is not seeded again, so a deleted demo issue stays deleted. The team goes in last and inserts that fail with `ALREADY_EXISTS` are skipped, so a start that stopped halfway completes the seed.
 
 ### How each backplane service is used
 
@@ -105,9 +105,10 @@ flowchart LR
   - The burn-up counts an issue in the scope from the day it was created and as done from its `completedAt`, which `applyPatch` sets on the move to `done` and clears on the move back.
   - Proof: `tests/core.test.ts`, with each rule's main error path.
   - Docs: why ranks and statistics live in the core. The server and the browser show the same numbers.
-- [ ] **M2 Backplane workspace.**
+- [x] **M2 Backplane workspace.**
   - `src/server/workspace.ts`: one `connectBackplane({ app: "linear-clone", port, apiKey })`. It provides repositories per bucket, `nextIssueId` with a revision retry, `seed(input/seed.json)`, the stats cache with invalidation, and attachments over `vfs.upload` and `vfs.download`.
-  - `src/server/log.ts`.
+  - `src/server/log.ts`. VERIFIED by probe: defuss-logs formats extra `write` arguments into the message, so fields go into a child logger's context.
+  - `src/core/model.ts` holds the document types and `src/core/seed.ts` the seed shift; `defuss-logs` 0.3.0 is a dependency, as the backplane README requires for `createLogger`.
   - `tests/helpers/daemon.ts` starts the real `defuss-backplane` binary from the `file:` dependency, with a temporary data directory, a free port and a random key, and waits for `/readyz`.
   - Proof: integration tests for CRUD; a stale revision returns `REVISION_CONFLICT`; 20 concurrent creates get 20 distinct IDs; a second seed is a no-op; a write clears the stats cache; an attachment round-trips byte for byte; log records can be read back from the app log and the tenant log.
 - [ ] **M3 Service.**

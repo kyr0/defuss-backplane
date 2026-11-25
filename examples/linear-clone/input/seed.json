@@ -1,0 +1,630 @@
+{
+  "today": "2026-10-03",
+  "people": [
+    {
+      "id": "aron",
+      "name": "Aron Homberg"
+    },
+    {
+      "id": "anna",
+      "name": "Anna Silva"
+    },
+    {
+      "id": "marco",
+      "name": "Marco Rossi"
+    },
+    {
+      "id": "priya",
+      "name": "Priya Natarajan"
+    },
+    {
+      "id": "hannah",
+      "name": "Hannah Lee"
+    },
+    {
+      "id": "sophie",
+      "name": "Sophie Tan"
+    }
+  ],
+  "teams": [
+    {
+      "id": "ENG",
+      "name": "Engineering",
+      "next": 143
+    }
+  ],
+  "projects": [
+    {
+      "id": "search-2-0",
+      "name": "Search 2.0",
+      "icon": "search",
+      "health": "on",
+      "lead": "marco",
+      "target": "2026-11-15"
+    },
+    {
+      "id": "board-view",
+      "name": "Board view",
+      "icon": "square-kanban",
+      "health": "risk",
+      "lead": "anna",
+      "target": "2026-10-30"
+    },
+    {
+      "id": "onboarding",
+      "name": "Onboarding",
+      "icon": "rocket",
+      "health": "on",
+      "lead": "sophie",
+      "target": "2026-10-20"
+    },
+    {
+      "id": "desktop-app",
+      "name": "Desktop app",
+      "icon": "monitor",
+      "health": "off",
+      "lead": "priya",
+      "target": "2026-12-12"
+    },
+    {
+      "id": "notifications",
+      "name": "Notifications",
+      "icon": "bell",
+      "health": "done",
+      "lead": "anna",
+      "target": "2026-09-26"
+    }
+  ],
+  "cycles": [
+    {
+      "id": "eng-24",
+      "team": "ENG",
+      "number": 24,
+      "start": "2026-09-28",
+      "end": "2026-10-11",
+      "closed": false
+    }
+  ],
+  "issues": [
+    {
+      "id": "ENG-140",
+      "team": "ENG",
+      "number": 140,
+      "title": "Review the new onboarding checklist",
+      "description": "Five steps instead of nine, a progress ring in the sidebar and a skip link on every step. Needs a copy review before it ships.",
+      "status": "review",
+      "priority": "medium",
+      "assignee": "sophie",
+      "labels": [
+        "design"
+      ],
+      "project": "onboarding",
+      "cycle": "eng-24",
+      "due": "2026-10-03",
+      "subtasks": [],
+      "createdAt": "2026-09-29T12:00:00.000Z",
+      "updatedAt": "2026-09-29T12:00:00.000Z",
+      "completedAt": null
+    },
+    {
+      "id": "ENG-139",
+      "team": "ENG",
+      "number": 139,
+      "title": "Keyboard shortcuts cheat sheet",
+      "description": "Press ? anywhere to open a sheet with every shortcut, grouped by area and searchable.",
+      "status": "review",
+      "priority": "medium",
+      "assignee": "priya",
+      "labels": [
+        "feature"
+      ],
+      "project": "onboarding",
+      "cycle": "eng-24",
+      "due": "2026-10-06",
+      "subtasks": [],
+      "createdAt": "2026-09-26T12:00:00.000Z",
+      "updatedAt": "2026-09-26T12:00:00.000Z",
+      "completedAt": null
+    },
+    {
+      "id": "ENG-142",
+      "team": "ENG",
+      "number": 142,
+      "title": "Command palette results flicker on fast typing",
+      "description": "Typing quickly in the command palette re-renders the results on every keystroke - the list flickers and the highlighted row jumps back to the first item.\n\nSteps to reproduce\n\n1. Press ⌘K\n2. Type assign to as fast as you can\n3. Watch the highlighted row\n\nExpected: results update once typing pauses, and the highlight stays on the same command.",
+      "status": "progress",
+      "priority": "urgent",
+      "assignee": "aron",
+      "labels": [
+        "bug"
+      ],
+      "project": "search-2-0",
+      "cycle": "eng-24",
+      "due": "2026-10-04",
+      "subtasks": [
+        {
+          "title": "Debounce the query by 80 ms",
+          "done": true
+        },
+        {
+          "title": "Keep the highlight by command id, not by index",
+          "done": false
+        },
+        {
+          "title": "Regression test with synthetic fast input",
+          "done": false
+        }
+      ],
+      "createdAt": "2026-09-30T12:00:00.000Z",
+      "updatedAt": "2026-10-01T12:00:00.000Z",
+      "completedAt": null
+    },
+    {
+      "id": "ENG-141",
+      "team": "ENG",
+      "number": 141,
+      "title": "Board view: drag cards between columns",
+      "description": "Cards move between status columns with the native drag-and-drop API; dropping a card changes its status everywhere it is shown.",
+      "status": "progress",
+      "priority": "high",
+      "assignee": "anna",
+      "labels": [
+        "feature"
+      ],
+      "project": "board-view",
+      "cycle": "eng-24",
+      "due": "2026-10-09",
+      "subtasks": [],
+      "createdAt": "2026-09-28T12:00:00.000Z",
+      "updatedAt": "2026-09-28T12:00:00.000Z",
+      "completedAt": null
+    },
+    {
+      "id": "ENG-138",
+      "team": "ENG",
+      "number": 138,
+      "title": "Migrate issue search to the new index",
+      "description": "Move full-text search to the new index: p95 under 40 ms for 100k issues, typo tolerance, and filters pushed down into the query.",
+      "status": "progress",
+      "priority": "high",
+      "assignee": "marco",
+      "labels": [
+        "performance"
+      ],
+      "project": "search-2-0",
+      "cycle": "eng-24",
+      "due": "2026-10-10",
+      "subtasks": [],
+      "createdAt": "2026-09-26T12:00:00.000Z",
+      "updatedAt": "2026-09-30T12:00:00.000Z",
+      "completedAt": null
+    },
+    {
+      "id": "ENG-137",
+      "team": "ENG",
+      "number": 137,
+      "title": "Empty states for filtered views",
+      "description": "A filtered view with no matches says why and offers to clear the filters - never a blank page.",
+      "status": "todo",
+      "priority": "low",
+      "assignee": "hannah",
+      "labels": [
+        "design"
+      ],
+      "project": "board-view",
+      "cycle": "eng-24",
+      "due": "2026-10-14",
+      "subtasks": [],
+      "createdAt": "2026-10-01T12:00:00.000Z",
+      "updatedAt": "2026-10-01T12:00:00.000Z",
+      "completedAt": null
+    },
+    {
+      "id": "ENG-136",
+      "team": "ENG",
+      "number": 136,
+      "title": "Cycle burn-up chart tooltips",
+      "description": "Hovering the burn-up chart shows scope, started and completed for that day.",
+      "status": "todo",
+      "priority": "medium",
+      "assignee": "aron",
+      "labels": [
+        "improvement"
+      ],
+      "project": "board-view",
+      "cycle": "eng-24",
+      "due": "2026-10-08",
+      "subtasks": [],
+      "createdAt": "2026-10-02T12:00:00.000Z",
+      "updatedAt": "2026-10-02T12:00:00.000Z",
+      "completedAt": null
+    },
+    {
+      "id": "ENG-135",
+      "team": "ENG",
+      "number": 135,
+      "title": "Slack notification when an issue is assigned",
+      "description": "Send a direct message with the issue title, priority and a link when someone is assigned.",
+      "status": "todo",
+      "priority": "medium",
+      "assignee": "sophie",
+      "labels": [
+        "feature"
+      ],
+      "project": "notifications",
+      "cycle": "eng-24",
+      "due": "2026-10-12",
+      "subtasks": [],
+      "createdAt": "2026-09-30T12:00:00.000Z",
+      "updatedAt": "2026-09-30T12:00:00.000Z",
+      "completedAt": null
+    },
+    {
+      "id": "ENG-134",
+      "team": "ENG",
+      "number": 134,
+      "title": "Sub-issue collapse state is lost on reload",
+      "description": "Collapsing the sub-issues of a parent and reloading the page expands them again. Persist the state per user.",
+      "status": "todo",
+      "priority": "high",
+      "assignee": "aron",
+      "labels": [
+        "bug"
+      ],
+      "project": "board-view",
+      "cycle": "eng-24",
+      "due": "2026-10-05",
+      "subtasks": [],
+      "createdAt": "2026-10-01T12:00:00.000Z",
+      "updatedAt": "2026-10-01T12:00:00.000Z",
+      "completedAt": null
+    },
+    {
+      "id": "ENG-133",
+      "team": "ENG",
+      "number": 133,
+      "title": "Offline mode for the desktop app",
+      "description": "Read and edit issues without a connection; sync and resolve conflicts when back online.",
+      "status": "backlog",
+      "priority": "low",
+      "assignee": null,
+      "labels": [
+        "feature"
+      ],
+      "project": "desktop-app",
+      "cycle": "eng-24",
+      "due": "2026-12-01",
+      "subtasks": [],
+      "createdAt": "2026-09-19T12:00:00.000Z",
+      "updatedAt": "2026-09-19T12:00:00.000Z",
+      "completedAt": null
+    },
+    {
+      "id": "ENG-132",
+      "team": "ENG",
+      "number": 132,
+      "title": "Bulk edit labels",
+      "description": "Select several issues and add or remove labels in one step.",
+      "status": "backlog",
+      "priority": "none",
+      "assignee": null,
+      "labels": [
+        "improvement"
+      ],
+      "project": "board-view",
+      "cycle": "eng-24",
+      "due": "2026-11-02",
+      "subtasks": [],
+      "createdAt": "2026-09-19T12:00:00.000Z",
+      "updatedAt": "2026-09-19T12:00:00.000Z",
+      "completedAt": null
+    },
+    {
+      "id": "ENG-131",
+      "team": "ENG",
+      "number": 131,
+      "title": "Sidebar contrast in dark mode",
+      "description": "Muted sidebar text falls below 4.5:1 on the dark theme. Raise it without losing the hierarchy.",
+      "status": "backlog",
+      "priority": "medium",
+      "assignee": "hannah",
+      "labels": [
+        "design"
+      ],
+      "project": "onboarding",
+      "cycle": "eng-24",
+      "due": "2026-10-28",
+      "subtasks": [],
+      "createdAt": "2026-09-26T12:00:00.000Z",
+      "updatedAt": "2026-09-26T12:00:00.000Z",
+      "completedAt": null
+    },
+    {
+      "id": "ENG-130",
+      "team": "ENG",
+      "number": 130,
+      "title": "Export a cycle report as PDF",
+      "description": "One page per cycle: scope, completion, burn-up and the issues that slipped.",
+      "status": "done",
+      "priority": "low",
+      "assignee": "priya",
+      "labels": [
+        "feature"
+      ],
+      "project": "notifications",
+      "cycle": "eng-24",
+      "due": "2026-09-30",
+      "subtasks": [],
+      "createdAt": "2026-09-12T12:00:00.000Z",
+      "updatedAt": "2026-09-12T12:00:00.000Z",
+      "completedAt": "2026-09-12T12:00:00.000Z"
+    },
+    {
+      "id": "ENG-129",
+      "team": "ENG",
+      "number": 129,
+      "title": "Inbox: mark all as read",
+      "description": "A single action in the inbox header clears every unread notification.",
+      "status": "done",
+      "priority": "medium",
+      "assignee": "anna",
+      "labels": [
+        "improvement"
+      ],
+      "project": "notifications",
+      "cycle": "eng-24",
+      "due": "2026-09-29",
+      "subtasks": [],
+      "createdAt": "2026-09-12T12:00:00.000Z",
+      "updatedAt": "2026-09-12T12:00:00.000Z",
+      "completedAt": "2026-09-12T12:00:00.000Z"
+    },
+    {
+      "id": "ENG-128",
+      "team": "ENG",
+      "number": 128,
+      "title": "Crash when pasting images into comments",
+      "description": "Pasting a large PNG into a comment froze the tab. Images are now uploaded in the background with a placeholder.",
+      "status": "done",
+      "priority": "urgent",
+      "assignee": "marco",
+      "labels": [
+        "bug"
+      ],
+      "project": "search-2-0",
+      "cycle": "eng-24",
+      "due": "2026-09-27",
+      "subtasks": [],
+      "createdAt": "2026-09-05T12:00:00.000Z",
+      "updatedAt": "2026-09-05T12:00:00.000Z",
+      "completedAt": "2026-09-05T12:00:00.000Z"
+    }
+  ],
+  "comments": [
+    {
+      "id": "ENG-140-c1",
+      "issue": "ENG-140",
+      "author": "sophie",
+      "body": "@Aron can you check the copy on step 3? It still says \"workspace\" twice.",
+      "createdAt": "2026-10-03T09:00:00.000Z"
+    },
+    {
+      "id": "ENG-142-c1",
+      "issue": "ENG-142",
+      "author": "marco",
+      "body": "I can reproduce it in Safari too - the debounce alone fixes most of it.",
+      "createdAt": "2026-10-03T11:48:00.000Z"
+    },
+    {
+      "id": "ENG-142-c2",
+      "issue": "ENG-142",
+      "author": "anna",
+      "body": "Let's keep the highlight by id instead of index 👍",
+      "createdAt": "2026-10-03T11:56:00.000Z"
+    },
+    {
+      "id": "ENG-138-c1",
+      "issue": "ENG-138",
+      "author": "marco",
+      "body": "Index rebuild is at 80% on staging, p95 is 31 ms so far 🚀",
+      "createdAt": "2026-10-03T11:00:00.000Z"
+    }
+  ],
+  "events": [
+    {
+      "id": "ENG-140-e1",
+      "issue": "ENG-140",
+      "actor": "sophie",
+      "at": "2026-09-29T12:00:00.000Z",
+      "kind": "created"
+    },
+    {
+      "id": "ENG-139-e1",
+      "issue": "ENG-139",
+      "actor": "priya",
+      "at": "2026-09-26T12:00:00.000Z",
+      "kind": "created"
+    },
+    {
+      "id": "ENG-142-e1",
+      "issue": "ENG-142",
+      "actor": "marco",
+      "at": "2026-09-30T12:00:00.000Z",
+      "kind": "created"
+    },
+    {
+      "id": "ENG-142-e2",
+      "issue": "ENG-142",
+      "actor": "anna",
+      "at": "2026-10-01T12:00:00.000Z",
+      "kind": "changed",
+      "field": "priority",
+      "to": "urgent"
+    },
+    {
+      "id": "ENG-142-e3",
+      "issue": "ENG-142",
+      "actor": "anna",
+      "at": "2026-10-01T12:00:00.000Z",
+      "kind": "changed",
+      "field": "assignee",
+      "to": "aron"
+    },
+    {
+      "id": "ENG-141-e1",
+      "issue": "ENG-141",
+      "actor": "anna",
+      "at": "2026-09-28T12:00:00.000Z",
+      "kind": "created"
+    },
+    {
+      "id": "ENG-138-e1",
+      "issue": "ENG-138",
+      "actor": "marco",
+      "at": "2026-09-26T12:00:00.000Z",
+      "kind": "created"
+    },
+    {
+      "id": "ENG-138-e2",
+      "issue": "ENG-138",
+      "actor": "marco",
+      "at": "2026-09-30T12:00:00.000Z",
+      "kind": "changed",
+      "field": "status",
+      "from": "todo",
+      "to": "progress"
+    },
+    {
+      "id": "ENG-137-e1",
+      "issue": "ENG-137",
+      "actor": "hannah",
+      "at": "2026-10-01T12:00:00.000Z",
+      "kind": "created"
+    },
+    {
+      "id": "ENG-136-e1",
+      "issue": "ENG-136",
+      "actor": "anna",
+      "at": "2026-10-02T12:00:00.000Z",
+      "kind": "created"
+    },
+    {
+      "id": "ENG-135-e1",
+      "issue": "ENG-135",
+      "actor": "sophie",
+      "at": "2026-09-30T12:00:00.000Z",
+      "kind": "created"
+    },
+    {
+      "id": "ENG-134-e1",
+      "issue": "ENG-134",
+      "actor": "priya",
+      "at": "2026-10-01T12:00:00.000Z",
+      "kind": "created"
+    },
+    {
+      "id": "ENG-133-e1",
+      "issue": "ENG-133",
+      "actor": "priya",
+      "at": "2026-09-19T12:00:00.000Z",
+      "kind": "created"
+    },
+    {
+      "id": "ENG-132-e1",
+      "issue": "ENG-132",
+      "actor": "anna",
+      "at": "2026-09-19T12:00:00.000Z",
+      "kind": "created"
+    },
+    {
+      "id": "ENG-131-e1",
+      "issue": "ENG-131",
+      "actor": "hannah",
+      "at": "2026-09-26T12:00:00.000Z",
+      "kind": "created"
+    },
+    {
+      "id": "ENG-130-e1",
+      "issue": "ENG-130",
+      "actor": "priya",
+      "at": "2026-09-12T12:00:00.000Z",
+      "kind": "created"
+    },
+    {
+      "id": "ENG-129-e1",
+      "issue": "ENG-129",
+      "actor": "anna",
+      "at": "2026-09-12T12:00:00.000Z",
+      "kind": "created"
+    },
+    {
+      "id": "ENG-128-e1",
+      "issue": "ENG-128",
+      "actor": "marco",
+      "at": "2026-09-05T12:00:00.000Z",
+      "kind": "created"
+    }
+  ],
+  "notifications": [
+    {
+      "id": "seed-1",
+      "person": "aron",
+      "kind": "comment",
+      "issue": "ENG-142",
+      "actor": "marco",
+      "detail": "I can reproduce it in Safari too - the debounce alone fixes most of it.",
+      "read": false,
+      "at": "2026-10-03T11:48:00.000Z"
+    },
+    {
+      "id": "seed-2",
+      "person": "aron",
+      "kind": "assigned",
+      "issue": "ENG-136",
+      "actor": "anna",
+      "detail": "Cycle burn-up chart tooltips",
+      "read": false,
+      "at": "2026-10-03T11:00:00.000Z"
+    },
+    {
+      "id": "seed-3",
+      "person": "aron",
+      "kind": "status",
+      "issue": "ENG-139",
+      "actor": "priya",
+      "detail": "review",
+      "read": false,
+      "at": "2026-10-03T10:00:00.000Z"
+    },
+    {
+      "id": "seed-4",
+      "person": "aron",
+      "kind": "mention",
+      "issue": "ENG-140",
+      "actor": "sophie",
+      "detail": "@Aron can you check the copy on step 3?",
+      "read": false,
+      "at": "2026-10-03T09:00:00.000Z"
+    },
+    {
+      "id": "seed-5",
+      "person": "aron",
+      "kind": "priority",
+      "issue": "ENG-131",
+      "actor": "hannah",
+      "detail": "medium",
+      "read": true,
+      "at": "2026-10-02T12:00:00.000Z"
+    },
+    {
+      "id": "seed-6",
+      "person": "aron",
+      "kind": "closed",
+      "issue": "ENG-128",
+      "actor": "marco",
+      "detail": "Crash when pasting images into comments",
+      "read": true,
+      "at": "2026-09-29T12:00:00.000Z"
+    }
+  ]
+}

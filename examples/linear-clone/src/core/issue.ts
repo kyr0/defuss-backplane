@@ -44,7 +44,7 @@ export type Fields = Pick<
 export type Draft = Fields;
 export type Patch = Partial<Fields>;
 
-export const LIMITS = { title: 200, description: 10_000, labels: LABELS.length, subtasks: 50 } as const;
+export const LIMITS = { title: 200, description: 10_000, labels: LABELS.length, subtasks: 50, comment: 5000, fileName: 200 } as const;
 /** A reference to a person, project or cycle document. */
 const REFERENCE = /^[a-z0-9][a-z0-9-]{0,47}$/;
 
@@ -171,4 +171,17 @@ export function compareIssues(a: Pick<Issue, "status" | "priority" | "number">, 
     PRIORITIES.indexOf(a.priority) - PRIORITIES.indexOf(b.priority) ||
     b.number - a.number
   );
+}
+
+export function validateComment(body: unknown) {
+  return text("body", body, LIMITS.comment, true);
+}
+
+/** An attachment's file name, which becomes the last part of its object key, so it holds no slash. */
+export function validateFileName(name: unknown) {
+  const value = text("name", name, LIMITS.fileName, true);
+  const control = [...value].some((c) => c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f);
+  if (control || value.includes("/") || value.includes("\\") || value === "." || value === "..")
+    throw new InvalidInput("name", "must not contain slashes or control characters, nor be . or ..");
+  return value;
 }

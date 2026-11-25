@@ -9,10 +9,11 @@
   "packageManager": "bun@1.4.5",
   "scripts": {
     "lint": "oxlint --deny-warnings src tests && tsc --noEmit",
-    "test": "bun test tests"
+    "test": "bun test ./tests"
   },
   "dependencies": {
     "defuss-backplane": "file:./deps/defuss-backplane",
+    "defuss-logs": "0.3.0",
     "defuss-mcp": "0.6.2",
     "defuss-rpc": "4.3.0",
     "defuss-serve": "0.4.0"

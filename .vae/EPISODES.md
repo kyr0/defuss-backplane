@@ -22,23 +22,11 @@ Wrap: EVERY lead becomes a test | .vae/VERIFY.py rule | one MEMORY line with BC,
 2026-11-23T21:01:51Z s=dcdb118f FINDING ARCH.md:10, ARCH.md:68 B01/P learn=none: VERIFIED: wording against an upstream document; no rule kind can check it.
 2026-11-23T21:01:51Z s=dcdb118f FINDING src/tools.ts:446 schedulerTools history comment learn=none: VERIFIED: comment wording against an upstream document; no rule kind can check it.
 2026-11-23T23:02:25Z s=dcdb118f FINDING ARCH.md:8, ARCH.md:20, ARCH.md:36, src/client.ts:1, src/services.ts:1 learn=none: VERIFIED: version wording against upstream source; no rule kind can check it.
-2026-11-24T18:07:50Z s=dcdb118f FINDING src/client.ts download size, src/transfer.ts object/files headers learn=test: VERIFIED: the existing expect(read).toMatchObject(stored) in tests/http.test.ts now runs against defuss-serve on Bun and fails without x-size.
 2026-11-24T18:07:50Z s=dcdb118f FINDING src/server.ts listen, listener address check learn=none: VERIFIED: defuss-serve binds the configured 127.0.0.1, so no test can make the address differ; lsof in the packed-consumer test checks the listener.
-2026-11-24T18:07:50Z s=dcdb118f FINDING ARCH.md Security paragraph, upload abort claim learn=test: VERIFIED: the new test promises 4 MiB, sends 64 KiB, drops the socket and checks the old revision and a later upload.
 2026-11-24T18:07:50Z s=dcdb118f FINDING tests/scheduler.test.ts worker test learn=none: VERIFIED: not reproduced in 33 runs, so neither the cause nor a fix is established.
-2026-11-24T19:27:55Z s=aceaa8e2 FAIL prose
-2026-11-24T19:30:26Z s=dcdb118f DONE fp=594bc62bc734 cov=98.0% paths=ARCH.md,CHANGELOG.md,README.md,bun.lock(+22)
 2026-11-24T19:30:26Z s=dcdb118f FINDING src/telemetry.ts:onExportError learn=none: VERIFIED: a test would need a refused OTLP endpoint and stderr capture of an in-process daemon, which pins log text rather than behavior.
-2026-11-24T19:30:26Z s=dcdb118f FINDING src/telemetry.ts:createTelemetry otlp learn=verifier: VERIFIED: make lint runs tsc over src, so the same mistake fails the gate.
-2026-11-24T19:30:26Z s=dcdb118f FINDING tests/o11y.test.ts:57 learn=test: VERIFIED: tests/o11y.test.ts asserts both series.
 2026-11-24T19:30:26Z s=dcdb118f FINDING src/telemetry.ts:quiet learn=none: VERIFIED: reproducing it needs a handler that outlives the 3 s drain; the guard is one try/catch at the only write sites.
-2026-11-24T19:30:26Z s=dcdb118f FINDING src/telemetry.ts:volume learn=test: VERIFIED: the o11y test checks readiness 200 on a fresh root and 503 for a root below a regular file.
 2026-11-24T19:30:26Z s=dcdb118f FINDING tests/scheduler.test.ts worker test learn=none: VERIFIED: not reproduced, so neither the cause nor a fix is established.
-2026-11-24T19:53:08Z s=aceaa8e2 FAIL tests.unit,tests.e2e.1,coverage
-2026-11-24T20:03:40Z s=dcdb118f DONE fp=637c6a7f8355 cov=98.2% paths=ARCH.md,CHANGELOG.md,README.md,bun.lock(+31)
-2026-11-24T20:03:40Z s=dcdb118f FINDING src/client.ts:logs maxIngestBatchBytes learn=test: VERIFIED: tests/logs.test.ts writes the five binary records through a defuss-logs batch sink.
-2026-11-24T20:03:40Z s=dcdb118f FINDING src/logs.ts:read learn=test: VERIFIED: tests/logs.test.ts expects INVALID_ARGUMENT for an invalid request on an absent log.
-2026-11-24T20:03:40Z s=dcdb118f FINDING tests/logs.test.ts own log learn=test: VERIFIED: the test and both pages state the ordering.
 2026-11-24T20:03:40Z s=dcdb118f FINDING scripts/e2e.ts own-log readback learn=test: VERIFIED: the e2e compares against the counted daemon starts.
 2026-11-24T20:03:40Z s=dcdb118f FINDING src/server.ts listen learn=test: VERIFIED: tests/o11y.test.ts covers both behaviors; CHANGELOG states the change.
 2026-11-24T20:03:40Z s=dcdb118f FINDING defuss-rpc console lines learn=none: VERIFIED: an upstream hook is needed; README and ARCH say these lines reach stdout and stderr only.
@@ -106,3 +94,15 @@ Wrap: EVERY lead becomes a test | .vae/VERIFY.py rule | one MEMORY line with BC,
 2026-11-25T05:05:59Z s=dcdb118f FINDING examples/linear-clone/src/core/digest.ts:dueDigest learn=test: VERIFIED: tests cover done, unassigned and future issues.
 2026-11-25T05:05:59Z s=dcdb118f FINDING examples/linear-clone/src/core/rollover.ts:planRollover learn=test: VERIFIED: tests cover running, ended, reused and repeated cases.
 2026-11-25T05:05:59Z s=dcdb118f FINDING examples/linear-clone/src/core/dates.ts learn=test: VERIFIED: tests check Berlin and Los Angeles around midnight UTC.
+2026-11-25T05:14:22Z s=dcdb118f FAIL tests.unit,linear-clone.verify
+2026-11-25T05:19:11Z s=dcdb118f DONE fp=8d764a2b4d1d cov=98.0% paths=Makefile,examples/linear-clone/Makefile,examples/linear-clone/bun.lock,examples/linear-clone/input/seed.json(+12)
+2026-11-25T05:19:11Z s=dcdb118f FINDING Makefile:test|coverage, package.json:scripts.test (root) learn=none: VERIFIED: bun test ./tests lists no examples/ file.
+2026-11-25T05:19:11Z s=dcdb118f FINDING examples/linear-clone/src/server/workspace.ts:events.list learn=test: VERIFIED: three consecutive runs of the suite pass with the fixed clock.
+2026-11-25T05:19:11Z s=dcdb118f FINDING examples/linear-clone/src/server/workspace.ts:nextNumber learn=test: VERIFIED: tests/workspace.test.ts.
+2026-11-25T05:19:11Z s=dcdb118f FINDING examples/linear-clone/src/server/workspace.ts:issues.update learn=test: VERIFIED: stale-revision test.
+2026-11-25T05:19:11Z s=dcdb118f FINDING examples/linear-clone/src/server/workspace.ts:seed learn=test: VERIFIED: seed tests, including deletion before a second seed.
+2026-11-25T05:19:11Z s=dcdb118f FINDING examples/linear-clone/src/server/workspace.ts:cycles.stats learn=test: VERIFIED: the test reads the cache through a second client.
+2026-11-25T05:19:11Z s=dcdb118f FINDING examples/linear-clone/src/server/workspace.ts:issues.remove learn=test: VERIFIED: removal test sees events and the attachment gone.
+2026-11-25T05:19:11Z s=dcdb118f FINDING examples/linear-clone/src/server/log.ts:createLog learn=test: VERIFIED: tests/log.test.ts and the workspace log test read the record back.
+2026-11-25T05:19:11Z s=dcdb118f FINDING examples/linear-clone/input/seed.json learn=none: VERIFIED: counts printed by the extraction and checked by the seed test.
+2026-11-25T05:19:11Z s=dcdb118f FINDING examples/linear-clone/tests/helpers/daemon.ts learn=test: VERIFIED: every workspace test runs against it.

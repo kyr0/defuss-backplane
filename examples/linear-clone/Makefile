@@ -60,10 +60,10 @@ metrics: ; @echo "UNKNOWN[metrics] BC undefined: the backplane's /metrics lines 
 bench:   ; @echo "UNKNOWN[bench] BC undefined: the Issues.list round trip over 1000 issues"; exit 2  ## time the hot paths
 
 test: ## run the tests against real subsystems
-	bun test tests
+	bun test ./tests
 
 coverage: ## measure line and function coverage; below 60 % it fails (bunfig.toml)
-	bun test --coverage tests
+	bun test --coverage ./tests
 
 lint: ## run oxlint and the strict TypeScript checker
 	bun run lint

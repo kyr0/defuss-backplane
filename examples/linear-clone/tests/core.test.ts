@@ -8,9 +8,12 @@ import {
   InvalidInput,
   type Issue,
   LIMITS,
+  validateComment,
   validateDraft,
+  validateFileName,
   validatePatch,
 } from "../src/core/issue.ts";
+import { type Seed, shiftSeed } from "../src/core/seed.ts";
 import { cycleId, planRollover } from "../src/core/rollover.ts";
 import { type Cycle, cycleStats } from "../src/core/stats.ts";
 
@@ -238,5 +241,40 @@ describe("cycle rollover", () => {
     expect(plan).toMatchObject({ close: "eng-24", next: cycle25, create: false });
     // A repeated delivery finds the cycle closed.
     expect(planRollover([{ ...cycle24, closed: true }], issues, "ENG", "2026-10-12")).toBeNull();
+  });
+});
+
+describe("comments, file names and the seed", () => {
+  test("a comment is trimmed text of 1 to 5000 characters", () => {
+    expect(validateComment("  ok  ")).toBe("ok");
+    for (const bad of ["  ", "x".repeat(LIMITS.comment + 1), 5]) expect(() => validateComment(bad)).toThrow(InvalidInput);
+  });
+
+  test("a file name has no slash, backslash or control character and is not . or ..", () => {
+    expect(validateFileName("Screen shot 2026.png")).toBe("Screen shot 2026.png");
+    for (const bad of ["a/b", "a\\b", "line\nbreak", "ta\tb", ".", "..", "", "x".repeat(LIMITS.fileName + 1)])
+      expect(() => validateFileName(bad)).toThrow(InvalidInput);
+  });
+
+  test("shifting the seed moves every date and instant by the same days", () => {
+    const seed: Seed = {
+      today: "2026-10-03",
+      people: [],
+      teams: [],
+      projects: [{ id: "p", name: "P", icon: "box", health: "on", lead: null, target: "2026-10-20" }],
+      cycles: [cycle24],
+      issues: [issue({ number: 1, due: "2026-10-04", completedAt: "2026-10-01T10:00:00.000Z" })],
+      comments: [{ id: "c", issue: "ENG-1", author: "aron", body: "b", createdAt: "2026-10-02T10:00:00.000Z" }],
+      events: [{ id: "e", issue: "ENG-1", actor: "aron", kind: "created", at: "2026-09-30T10:00:00.000Z" }],
+      notifications: [],
+    };
+    const later = shiftSeed(seed, 53);
+    expect(later.today).toBe("2026-11-25");
+    expect(later.cycles[0]).toMatchObject({ start: "2026-11-20", end: "2026-12-03" });
+    expect(later.projects[0]!.target).toBe("2026-12-12");
+    expect(later.issues[0]).toMatchObject({ due: "2026-11-26", completedAt: "2026-11-23T10:00:00.000Z" });
+    expect(later.comments[0]!.createdAt).toBe("2026-11-24T10:00:00.000Z");
+    expect(later.events[0]!.at).toBe("2026-11-22T10:00:00.000Z");
+    expect(() => shiftSeed({ ...seed, today: "03.10.2026" }, 1)).toThrow(TypeError);
   });
 });

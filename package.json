@@ -33,7 +33,7 @@
   "scripts": {
     "build": "pkgroll --clean-dist --license=dist/THIRD-PARTY-LICENSES.txt",
     "lint": "oxlint --deny-warnings src tests scripts && tsc --noEmit && tsc -p tests && tsc -p scripts",
-    "test": "bun test tests",
+    "test": "bun test ./tests",
     "start": "node dist/cli.js"
   },
   "dependencies": {

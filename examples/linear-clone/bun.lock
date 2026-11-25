@@ -6,6 +6,7 @@
       "name": "linear-clone",
       "dependencies": {
         "defuss-backplane": "file:./deps/defuss-backplane",
+        "defuss-logs": "0.3.0",
         "defuss-mcp": "0.6.2",
         "defuss-rpc": "4.3.0",
         "defuss-serve": "0.4.0",
@@ -14,9 +15,6 @@
         "@types/bun": "1.4.5",
         "oxlint": "1.94.0",
         "typescript": "5.9.3",
-      },
-      "peerDependencies": {
-        "typescript": "^7",
       },
     },
   },
