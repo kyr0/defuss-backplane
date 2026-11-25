@@ -318,9 +318,9 @@ export async function openWorkspace(options: {
         await record({ issue, actor, kind: "attached", to: file });
         return { name: file, size: stored.size, revision: stored.revision, mtimeMs: stored.mtimeMs };
       },
-      download: (issue: string, name: unknown) => files.download(key(issue, validateFileName(name))),
+      download: async (issue: string, name: unknown) => files.download(key(issue, validateFileName(name))),
       list: listFiles,
-      remove: (issue: string, name: unknown) => files.delete(key(issue, validateFileName(name))),
+      remove: async (issue: string, name: unknown) => files.delete(key(issue, validateFileName(name))),
     },
     /** Fills an empty workspace with the demo, its dates moved to today. The team goes in last: a start that stops
      * halfway leaves no team, and the next start completes the rest, skipping documents that exist. */

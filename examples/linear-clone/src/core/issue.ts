@@ -52,9 +52,9 @@ const REFERENCE = /^[a-z0-9][a-z0-9-]{0,47}$/;
 export class InvalidInput extends Error {
   constructor(
     readonly field: string,
-    message: string,
+    readonly detail: string,
   ) {
-    super(field + ": " + message);
+    super(field + ": " + detail);
     this.name = "InvalidInput";
   }
 }

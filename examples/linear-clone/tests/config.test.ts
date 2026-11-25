@@ -11,6 +11,7 @@ test("only the bot key is required; every other key has a default", () => {
     backplaneApiKey: "bot-key",
     workspace: "vector",
     viewer: "aron",
+    timeZone: "UTC",
   });
 });
 
@@ -21,9 +22,9 @@ test("the keys of .env.example, filled in, configure the service", () => {
       .filter((line) => /^[A-Z_]+=/.test(line))
       .map((line) => line.split("=", 2) as [string, string]),
   );
-  expect(Object.keys(example).sort()).toEqual(["BACKPLANE_API_KEY", "BACKPLANE_PORT", "PORT", "VIEWER", "WORKSPACE"]);
-  const config = loadConfig({ ...example, ...key, PORT: "8080", WORKSPACE: "Café Ops", VIEWER: "anna" });
-  expect(config).toMatchObject({ port: 8080, backplanePort: 43127, workspace: "Café Ops", viewer: "anna" });
+  expect(Object.keys(example).sort()).toEqual(["BACKPLANE_API_KEY", "BACKPLANE_PORT", "PORT", "TIME_ZONE", "VIEWER", "WORKSPACE"]);
+  const config = loadConfig({ ...example, ...key, PORT: "8080", WORKSPACE: "Café Ops", VIEWER: "anna", TIME_ZONE: "Europe/Berlin" });
+  expect(config).toMatchObject({ port: 8080, backplanePort: 43127, workspace: "Café Ops", viewer: "anna", timeZone: "Europe/Berlin" });
 });
 
 test("an empty key takes its default, as a copied .env.example leaves them", () => {
@@ -44,6 +45,7 @@ test.each([
   [{ BACKPLANE_API_KEY: "schlüssel" }, "BACKPLANE_API_KEY must contain printable ASCII without whitespace"],
   // 25 characters, 50 bytes: the limit counts bytes.
   [{ WORKSPACE: "ü".repeat(25) }, "WORKSPACE must have at most 48 UTF-8 bytes"],
+  [{ TIME_ZONE: "Mars/Olympus" }, "TIME_ZONE must be an IANA time zone such as Europe/Berlin"],
 ])("%p fails startup with %p", (overrides, message) => {
   expect(() => loadConfig({ ...key, ...overrides })).toThrow(message);
 });

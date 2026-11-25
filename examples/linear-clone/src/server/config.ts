@@ -12,6 +12,8 @@ export type Config = {
   workspace: string;
   /** `VIEWER`: the person whom "My issues", comments and the activity feed refer to, until user auth exists. */
   viewer: string;
+  /** `TIME_ZONE`: the IANA zone whose calendar decides today, due dates and cycle days. */
+  timeZone: string;
 };
 
 type Env = Record<string, string | undefined>;
@@ -35,6 +37,7 @@ export function loadConfig(env: Env = process.env): Config {
     backplaneApiKey: read(env, "BACKPLANE_API_KEY", ""),
     workspace: read(env, "WORKSPACE", "vector"),
     viewer: read(env, "VIEWER", "aron"),
+    timeZone: read(env, "TIME_ZONE", "UTC"),
   };
   // VERIFIED: the daemon's own rule for its API_KEY (defuss-backplane src/config.ts).
   if (!config.backplaneApiKey) problems.push("BACKPLANE_API_KEY is required: the daemon's API_KEY");
@@ -43,6 +46,11 @@ export function loadConfig(env: Env = process.env): Config {
   // VERIFIED: the daemon accepts a tenant of 1 to 48 UTF-8 bytes (defuss-backplane src/scope.ts). Checking here fails at
   // startup instead of at the first call.
   if (Buffer.byteLength(config.workspace) > 48) problems.push("WORKSPACE must have at most 48 UTF-8 bytes");
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: config.timeZone });
+  } catch {
+    problems.push("TIME_ZONE must be an IANA time zone such as Europe/Berlin");
+  }
   if (problems.length) throw new Error("Invalid configuration: " + problems.join("; "));
   return config;
 }

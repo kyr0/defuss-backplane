@@ -1,6 +1,6 @@
 # Plan: the linear-clone example app
 
-Status: in progress. M0 to M2 are done.
+Status: in progress. M0 to M3 are done.
 
 Tick a milestone `- [x]` when its proof passes, then run `verify` on its scope.
 
@@ -111,11 +111,15 @@ flowchart LR
   - `src/core/model.ts` holds the document types and `src/core/seed.ts` the seed shift; `defuss-logs` 0.3.0 is a dependency, as the backplane README requires for `createLogger`.
   - `tests/helpers/daemon.ts` starts the real `defuss-backplane` binary from the `file:` dependency, with a temporary data directory, a free port and a random key, and waits for `/readyz`.
   - Proof: integration tests for CRUD; a stale revision returns `REVISION_CONFLICT`; 20 concurrent creates get 20 distinct IDs; a second seed is a no-op; a write clears the stats cache; an attachment round-trips byte for byte; log records can be read back from the app log and the tenant log.
-- [ ] **M3 Service.**
+- [x] **M3 Service.**
   - `src/server/api.ts` with namespaces `Workspace` (bootstrap: people, teams, projects, cycles, labels, viewer), `Issues` (list with paging over the 1000-row query bound, get, create, update, remove, comment, subtasks, attachments), `Inbox` (list, markRead), `Cycles` (current with stats) and `Jobs`.
   - Upload and download handlers named `attachment`, with a size limit guard.
   - `src/server/server.ts`: defuss-serve with `publicDir: dist/public`, `rpcPlugin(rpc)`, `mcpPlugin`, host `127.0.0.1`, SIGTERM handling.
-  - `src/server/cli.ts`: checks backplane readiness at startup and fails fast with a clear message.
+  - `src/server/cli.ts`: checks backplane readiness at startup and fails fast with a clear message. It reads `dist/public` and `input/seed.json` from the working directory, as Bun reads `.env`.
+  - VERIFIED by probe with defuss-rpc 4.3.0: every thrown error reaches the client as HTTP 500 with `{"error":"Error calling function <m>: <message>"}`. `src/core/faults.ts` therefore puts a code in the message (`NOT_FOUND: …`, `INVALID_INPUT(title): …`), the server rewrites the status from it (400, 404, 409, 413, 503), and the browser reads it back. The MCP bridge reports a failed call as "RPC call rejected (HTTP 404)", so agents see the status.
+  - VERIFIED by probe: an upload handler's metadata holds the upload ID and file name but no headers. An upload therefore names its issue in its ID, `<issue>.<uuid>`, and downloads use the ID `<issue>/<name>`.
+  - VERIFIED: a streaming upload handler that threw without reading left defuss-rpc 4.3.0's temp file open, and Bun failed with "A FileHandle object was closed during garbage collection". The guard now refuses a missing issue, a bad name or an announced size above 25 MiB with 403 before the bytes arrive. The root cause is fixed in defuss-rpc 4.3.1 (built locally, not yet on npm); the app moves to it once it is published.
+  - `TIME_ZONE` (default `UTC`) joins the configuration: today, due dates and cycle days follow its calendar.
   - Proof: tests through the real defuss-rpc client and the official MCP client. Every API method is called once, with its main error. `Jobs` is absent from MCP. SIGTERM exits with 0. Each invalid configuration value fails startup.
 - [ ] **M4 Schedules.**
   - `src/server/jobs.ts`: upsert both schedules, the guard, `dueDigest` and `cycleRollover` on top of the core.

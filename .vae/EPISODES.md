@@ -27,16 +27,7 @@ Wrap: EVERY lead becomes a test | .vae/VERIFY.py rule | one MEMORY line with BC,
 2026-11-24T19:30:26Z s=dcdb118f FINDING src/telemetry.ts:onExportError learn=none: VERIFIED: a test would need a refused OTLP endpoint and stderr capture of an in-process daemon, which pins log text rather than behavior.
 2026-11-24T19:30:26Z s=dcdb118f FINDING src/telemetry.ts:quiet learn=none: VERIFIED: reproducing it needs a handler that outlives the 3 s drain; the guard is one try/catch at the only write sites.
 2026-11-24T19:30:26Z s=dcdb118f FINDING tests/scheduler.test.ts worker test learn=none: VERIFIED: not reproduced, so neither the cause nor a fix is established.
-2026-11-24T20:03:40Z s=dcdb118f FINDING scripts/e2e.ts own-log readback learn=test: VERIFIED: the e2e compares against the counted daemon starts.
-2026-11-24T20:03:40Z s=dcdb118f FINDING src/server.ts listen learn=test: VERIFIED: tests/o11y.test.ts covers both behaviors; CHANGELOG states the change.
 2026-11-24T20:03:40Z s=dcdb118f FINDING defuss-rpc console lines learn=none: VERIFIED: an upstream hook is needed; README and ARCH say these lines reach stdout and stderr only.
-2026-11-24T20:03:59Z s=aceaa8e2 FAIL tests.unit
-2026-11-24T20:10:43Z s=dcdb118f DONE fp=8545d844fe0e cov=98.2% paths=ARCH.md,CHANGELOG.md,README.md,bun.lock(+31)
-2026-11-24T20:10:43Z s=dcdb118f FINDING src/logs.ts:read isOwnLog learn=test: VERIFIED: tests/logs.test.ts and scripts/consumer.ts assert the read exception and the write rejection.
-2026-11-24T20:25:03Z s=dcdb118f DONE fp=ab4e7f7410f8 cov=98.2% paths=ARCH.md,CHANGELOG.md,README.md,bun.lock(+32)
-2026-11-24T20:25:03Z s=dcdb118f FINDING src/db.ts:version learn=verifier: VERIFIED: make lint runs tsc over src, so a repeat fails the gate.
-2026-11-24T20:25:03Z s=dcdb118f FINDING src/scope.ts:component learn=test: VERIFIED: tests/storage.test.ts checks the examples, the pattern, the length, the absence of _, case and punctuation separation in every engine, and 商店 and 123 
-2026-11-24T20:25:03Z s=dcdb118f FINDING scripts/e2e.ts v0.1.0 fixture learn=test: VERIFIED: tests/revisions.test.ts and the e2e native readback cover the replaced checks.
 2026-11-24T20:52:57Z s=dcdb118f FAIL tests.e2e.1
 2026-11-24T21:03:45Z s=dcdb118f FAIL tests.unit
 2026-11-24T21:09:14Z s=dcdb118f FINDING tests/scheduler.test.ts worker test got payload 7: an every-second schedule fired between create and the payload edit; fixed by creating it yearly and setting the cron in the edit learn=test
@@ -106,3 +97,12 @@ Wrap: EVERY lead becomes a test | .vae/VERIFY.py rule | one MEMORY line with BC,
 2026-11-25T05:19:11Z s=dcdb118f FINDING examples/linear-clone/src/server/log.ts:createLog learn=test: VERIFIED: tests/log.test.ts and the workspace log test read the record back.
 2026-11-25T05:19:11Z s=dcdb118f FINDING examples/linear-clone/input/seed.json learn=none: VERIFIED: counts printed by the extraction and checked by the seed test.
 2026-11-25T05:19:11Z s=dcdb118f FINDING examples/linear-clone/tests/helpers/daemon.ts learn=test: VERIFIED: every workspace test runs against it.
+2026-11-25T05:32:54Z s=dcdb118f FAIL linear-clone.verify
+2026-11-25T05:34:36Z s=dcdb118f DONE fp=b82c3015000f cov=98.0% paths=examples/linear-clone/bun.lock,examples/linear-clone/package.json,examples/linear-clone/src/core/faults.ts,examples/linear-clone/src/core/issue.ts(+10)
+2026-11-25T05:34:36Z s=dcdb118f FINDING examples/linear-clone/src/core/faults.ts + src/server/server.ts:withStatus learn=test: VERIFIED: tests/api.test.ts asserts status and code for every method's main error, and the MCP error text.
+2026-11-25T05:34:36Z s=dcdb118f FINDING examples/linear-clone/src/server/server.ts:upload guard (upstream root cause) learn=test: VERIFIED: four consecutive suite runs without the error; defuss-rpc src/upload.test.ts covers the root cause.
+2026-11-25T05:34:36Z s=dcdb118f FINDING examples/linear-clone/src/server/server.ts:download handler learn=test: VERIFIED: tests for 'no-slash' and 'ENG-141/../x' answer 404; five runs pass.
+2026-11-25T05:34:36Z s=dcdb118f FINDING examples/linear-clone/src/server/server.ts:uploadIdOf learn=test: VERIFIED: the round-trip test uploads with uploadIdOf and downloads byte for byte.
+2026-11-25T05:34:36Z s=dcdb118f FINDING examples/linear-clone/src/server/cli.ts learn=test: VERIFIED: tests/cli.test.ts spawns it in a temporary project directory.
+2026-11-25T05:34:36Z s=dcdb118f FINDING examples/linear-clone/src/server/api.ts learn=test: VERIFIED: each method called once through the RPC client, the main error path asserted.
+2026-11-25T05:34:36Z s=dcdb118f FINDING examples/linear-clone/src/server/config.ts:TIME_ZONE learn=test: VERIFIED: config tests.
