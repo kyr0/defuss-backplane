@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+Moved to defuss-serve 0.4.0, defuss-rpc 4.3.0 and defuss-mcp 0.6.2. `defuss-backplane/client` runs each connection on a defuss-rpc client context, so the application's `addHook()` and `setHeaders()` cannot reach backplane calls. Every request of a connection still refuses redirects, which would send a call's arguments to another address, and a connection sends one schema request.
+
 Added scheduled RPC callbacks. A schedule with handler `_rpc` makes the daemon call the app's defuss-rpc function named in its payload at each occurrence, with the payload's arguments and the bot key as bearer token, so the app needs no cron or worker of its own. Targets are loopback and the origins in `BACKPLANE_CALLBACK_ORIGINS`. Handler names starting with `_` are reserved. Scheduling is now always on and `BACKPLANE_SCHEDULER` is gone: every daemon serves the twelve scheduler tools. Moved to defuss-scheduler 0.2.0, whose `ready` call lets one dispatcher serve every app.
 
 Changed the on-disk names of apps, tenants and buckets from hex to a readable slug and the first 8 hex digits of the name's SHA-256, such as `acme-gmbh-033aedd8`. The slug keeps letters of every script, which defuss-db 3.3.0 accepts in collection names. This breaks the on-disk layout: the daemon does not read data roots written by earlier versions, and no migration exists. Each DB bucket is now a collection of the tenant's one database, and its revision collection ends in `_rev`. The daemon's own log moved to `_backplane/logs`. Moved to defuss-db 3.3.0.

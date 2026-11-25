@@ -6,33 +6,8 @@ Agents append `<UTC ISO> s=<session> LESSON <VAE-DIALECT>` only for a falsified 
 Session start injects the 3 newest open entries: LESSON, FINDING learn=none, FAIL without a later DONE.
 Wrap: EVERY lead becomes a test | .vae/VERIFY.py rule | one MEMORY line with BC, then delete; OR delete BC evidence. -->
 
-2026-11-22T09:03:42Z s=backplan FAIL prose
-2026-11-22T09:04:53Z s=backplan FAIL tests.unit,coverage
-2026-11-22T09:07:29Z s=backplan FAIL tests.e2e.1
-2026-11-22T09:07:40Z s=backplan FAIL tests.e2e.1
-2026-11-22T09:18:16Z s=backplan DONE fp=4bf1b23bfa1c cov=93.0% paths=.github/workflows/verify.yml,AGENTS.md,ARCH.md,CHANGELOG.md(+21)
-2026-11-22T09:18:16Z s=backplan FINDING src/services.ts collection learn=test: The 48-byte bucket regression exposed the upstream 64-character collection cap. The suffix partitions native stores and the prefix names their collections. A sa
-2026-11-22T09:18:16Z s=backplan FINDING src/services.ts cache.get learn=test: The expiry test observed a logically expired key still present in dbsonl. The expired read now conditionally deletes the observed revision and preserves a concu
-2026-11-22T09:18:16Z s=backplan FINDING package.json build and scripts/consumer.mjs learn=test: A clean npm install of the full dependency tree was killed during unpack. The release bundles the pinned DB code, preserves bundled licenses, and installs with 
-2026-11-22T09:18:16Z s=backplan FINDING README.md quick start learn=test: Installing from the application directory uses the copied tarball. scripts/e2e.mjs installs the archive in a clean application with each package manager.
-2026-11-22T10:14:16Z s=backplan DONE fp=7d5e4de0c6c5 cov=91.3% paths=.github/workflows/verify.yml,AGENTS.md,ARCH.md,CHANGELOG.md(+26)
-2026-11-22T10:14:16Z s=backplan FINDING src/tools.ts jsonEquivalent and decodeId learn=test: scripts/consumer-revisions.mjs checks both runtime pairs.
-2026-11-22T10:14:16Z s=backplan FINDING src/pool.ts cold admission learn=test: tests/revisions.test.ts inspects directory contents and typed faults after real operations.
-2026-11-22T10:14:16Z s=backplan FINDING src/faults.ts withFaults learn=test: tests/http.test.ts sends a mixed legacy batch. The packaged tests assert 400, 409 and 422.
-2026-11-22T10:14:16Z s=backplan FINDING src/client.ts db<T> learn=test: scripts/consumer-types.ts tests both accepted and rejected reads and writes against the packed declarations.
-2026-11-22T10:14:16Z s=backplan FINDING src/tools.ts MCP annotations learn=test: The official MCP client asserts both hints for all ten tools in each packed phase.
-2026-11-22T10:14:16Z s=backplan FINDING src/services.ts version and change learn=test: The packed consumer races the two protocols and uses an old revision after an intervening write.
-2026-11-22T10:14:16Z s=backplan FINDING ARCH.md:20 B09 learn=test: The storage test checks the raw expired entry after a read and the value of a concurrent replacement.
-2026-11-22T12:25:31Z s=dcdb118f DONE fp=12a2344a5df8 cov=91.3% paths=.github/workflows/verify.yml,AGENTS.md,ARCH.md,CHANGELOG.md(+28)
-2026-11-22T12:25:31Z s=dcdb118f FINDING scripts/e2e.mjs:100 127.0.0.2 connect probe (now scripts/e2e.ts lsof listener check) learn=test: The packed e2e asserts the lsof listener set in each daemon run; ARCH.md records why a 127.0.0.2 probe is inconclusive on macOS. CI installs lsof if the runner 
-2026-11-22T12:25:31Z s=dcdb118f FINDING tsconfig.json include=[src]; tests/*.ts and scripts/*.mjs outside strict tsc learn=verifier: .vae/VERIFY.py rule backplane.typescript fails on any .js|.mjs|.cjs|.jsx under src, tests or scripts (checked: exit 1 with an added scripts/x.mjs, 0 without).
-2026-11-22T13:17:58Z s=dcdb118f DONE fp=eacc6ceb7b87 cov=92.8% paths=.github/workflows/verify.yml,AGENTS.md,ARCH.md,CHANGELOG.md(+32)
-2026-11-22T13:17:58Z s=dcdb118f FINDING src/services.ts createServices (423 lines mixing pure validation, filesystem I/O and both engines) learn=test: Existing storage, revision and HTTP tests plus the packed consumer type check cover the moved behavior; no new invariant beyond module layout, which needs no ru
 2026-11-22T13:17:58Z s=dcdb118f FINDING src/tools.ts tool() doc; CHANGELOG.md Unreleased learn=none: Wording precision in self-written docs; not mechanically checkable.
-2026-11-22T15:08:18Z s=dcdb118f DONE fp=1b5141fbda3b cov=97.1% paths=.github/workflows/verify.yml,AGENTS.md,ARCH.md,CHANGELOG.md(+32)
 2026-11-22T15:08:18Z s=dcdb118f FINDING package.json:4 description learn=none: Product positioning wording chosen by the human; not mechanically checkable.
-2026-11-22T15:38:35Z s=dcdb118f DONE fp=8dfdc7f37091 cov=98.6% paths=.github/workflows/verify.yml,AGENTS.md,ARCH.md,CHANGELOG.md(+35)
-2026-11-22T15:38:35Z s=dcdb118f FINDING src/server.ts listen().close learn=test: scripts/e2e.ts stalls a 64 MiB download before each daemon's SIGTERM; the existing 8 s exit-code assertion fails if shutdown blocks.
 2026-11-22T15:38:35Z s=dcdb118f FINDING src/server.ts server.timeout learn=none: Runtime behaviour recorded in ARCH.md; no rule can check an absent timeout.
 2026-11-22T15:38:35Z s=dcdb118f FINDING src/vfs.ts download learn=test: tests/vfs.test.ts eviction test; mutating the lease to release immediately made it fail (1 fail), restoring it passes.
 2026-11-22T15:38:35Z s=dcdb118f FINDING src/server.ts close createRpcServer({}) learn=test: tests/http.test.ts starts a second daemon in the same process and exercises its VFS service.
@@ -100,3 +75,34 @@ Wrap: EVERY lead becomes a test | .vae/VERIFY.py rule | one MEMORY line with BC,
 2026-11-24T21:11:49Z s=dcdb118f FINDING src/scheduler.ts:schedulerApi claim learn=test: VERIFIED: tests/callbacks.test.ts covers the reserved handler, the bad URLs and the worker claim.
 2026-11-24T21:11:49Z s=dcdb118f FINDING src/callbacks.ts security boundary learn=none: VERIFIED: ARCH.md security section states the boundary; the tests cover rejection.
 2026-11-24T21:11:49Z s=dcdb118f FINDING tests/scheduler.test.ts:'schedules are shared by RPC and MCP, and the client queue runs a worker' learn=test: VERIFIED: the test itself now cannot see a pre-edit run; 5 consecutive runs passed.
+2026-11-24T22:27:56Z s=dcdb118f DONE fp=99ab5cc09bff cov=98.0% paths=plans/2026-11-24_22-24_linear-clone-example.md
+2026-11-24T22:27:56Z s=dcdb118f FINDING plans/2026-11-24_22-24_linear-clone-example.md:13 P07 learn=none: VERIFIED: a one-off wording defect in a plan page; no mechanical recurrence check fits.
+2026-11-24T22:27:56Z s=dcdb118f FINDING plans/2026-11-24_22-24_linear-clone-example.md:17 B01 learn=none: VERIFIED: claim narrowed to its evidence.
+2026-11-24T22:27:56Z s=dcdb118f FINDING plans/2026-11-24_22-24_linear-clone-example.md:21 B01 learn=none: VERIFIED: attribution corrected.
+2026-11-24T22:27:56Z s=dcdb118f FINDING plans/2026-11-24_22-24_linear-clone-example.md:27 B01 learn=none: VERIFIED: claim now carries its evidence.
+2026-11-24T22:27:56Z s=dcdb118f FINDING plans/2026-11-24_22-24_linear-clone-example.md:50 B01 and Ponytail learn=none: VERIFIED: unmeasured optimization marked as hypothesis.
+2026-11-24T22:27:56Z s=dcdb118f FINDING plans/2026-11-24_22-24_linear-clone-example.md:124 correctness learn=none: VERIFIED: redundant asset removed from the plan.
+2026-11-24T22:27:56Z s=dcdb118f FINDING plans/2026-11-24_22-24_linear-clone-example.md:23 B09 learn=none: VERIFIED: version pinned to the project's own pin.
+2026-11-24T22:27:56Z s=dcdb118f FINDING plans/2026-11-24_22-24_linear-clone-example.md:159 B01 learn=none: VERIFIED: sources added.
+2026-11-24T22:27:56Z s=dcdb118f FINDING plans/2026-11-24_22-24_linear-clone-example.md:152 P07 learn=none: VERIFIED: modality made explicit.
+2026-11-24T22:31:46Z s=dcdb118f DONE fp=cc82a7f6d8ca cov=98.0% paths=plans/2026-11-24_22-24_linear-clone-example.md
+2026-11-24T22:31:46Z s=dcdb118f FINDING plans/2026-11-24_22-24_linear-clone-example.md:41 B01 learn=none: VERIFIED: the plan now states the probed contract; M3's MCP test will exercise it.
+2026-11-24T22:39:46Z s=dcdb118f DONE fp=d80e7140c518 cov=98.0% paths=plans/2026-11-24_22-24_linear-clone-example.md
+2026-11-24T22:39:46Z s=dcdb118f FINDING plans/2026-11-24_22-24_linear-clone-example.md:20,32,43 B09 learn=none: VERIFIED: plan text aligned with the upstream state.
+2026-11-25T00:34:14Z s=dcdb118f DONE fp=1870a7af1824 cov=98.0% paths=ARCH.md,CHANGELOG.md,bun.lock,package.json(+2)
+2026-11-25T00:34:14Z s=dcdb118f FINDING package.json dependencies learn=test: VERIFIED: the existing suite and e2e exercise every route, MCP tool and RPC module on the new versions.
+2026-11-25T00:34:14Z s=dcdb118f FINDING src/client.ts:1 and ARCH.md:8 (reuse decision) learn=none: VERIFIED: the rationale now matches observed behaviour of the released versions.
+2026-11-25T00:34:14Z s=dcdb118f FINDING ARCH.md:45 B09 learn=none: VERIFIED: claim removed with its basis.
+2026-11-25T00:34:14Z s=dcdb118f FINDING plans/2026-11-24_22-24_linear-clone-example.md:20,21,41-43 B09 learn=none: VERIFIED: plan facts match npm.
+2026-11-25T01:42:45Z s=dcdb118f DONE fp=54dc84de7de1 cov=98.0% paths=ARCH.md,CHANGELOG.md,bun.lock,package.json(+3)
+2026-11-25T01:42:45Z s=dcdb118f FINDING src/client.ts:connectBackplane learn=test: VERIFIED: tests/client.test.ts adds the isolation, wrong-key and redirect contracts; the existing suite covers every module through the client.
+2026-11-25T01:42:45Z s=dcdb118f FINDING src/client.ts redirect guard (security) learn=test: VERIFIED: 'a call answered with a redirect fails, so its arguments never reach another address' fails without the guard.
+2026-11-25T01:42:45Z s=dcdb118f FINDING ARCH.md:8 B01 (own claim corrected) learn=none: VERIFIED: claim narrowed to the probe result.
+2026-11-25T01:42:45Z s=dcdb118f FINDING tests/client.test.ts:28 learn=none: VERIFIED: matches the error table.
+2026-11-25T01:42:45Z s=dcdb118f FINDING src/client.ts connect cost learn=none: VERIFIED: accepted cost; a context API exposing its cached schema would remove it.
+2026-11-25T02:59:17Z s=dcdb118f DONE fp=41e758ab1c76 cov=98.0% paths=ARCH.md,CHANGELOG.md,bun.lock,package.json(+3)
+2026-11-25T02:59:17Z s=dcdb118f FINDING src/client.ts:createRpcContext fetch learn=test: VERIFIED: tests/client.test.ts covers calls and the schema request.
+2026-11-25T02:59:17Z s=dcdb118f FINDING src/client.ts:getRpcClient({ schema }) learn=test: VERIFIED: 'a connection sends one schema request and refuses a redirected one'.
+2026-11-25T02:59:17Z s=dcdb118f FINDING src/client.ts VFS upload (own earlier claim) learn=none: VERIFIED: read the code.
+2026-11-25T02:59:17Z s=dcdb118f FINDING plans/2026-11-24_22-24_linear-clone-example.md:42 B01 learn=none: VERIFIED: probe repeated on the named versions.
+2026-11-25T02:59:17Z s=dcdb118f FINDING package.json learn=test: VERIFIED: the suite and e2e cover every client path.

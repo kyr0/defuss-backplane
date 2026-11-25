@@ -1,5 +1,7 @@
-/** VERIFIED: Headers are scoped to this connection and sent on the first schema fetch. The stock defuss-rpc 4.0.0 discovery fetch omits them. */
-import { DSON } from "defuss-dson";
+/** VERIFIED: Each connection is a defuss-rpc 4.3.0 client context with the bot key, so the application's `addHook()`
+ * and `setHeaders()` never reach backplane calls. VERIFIED by probe with 4.1.0: through the process-wide client, a
+ * client guard of the application blocked a backplane call. Every failure is a `BackplaneError`. */
+import { createRpcContext } from "defuss-rpc/client";
 import type { Document, NewDocument } from "defuss-db";
 import type { CacheResult } from "./cache.js";
 import type { Row, Query } from "./db.js";
@@ -90,12 +92,9 @@ export async function connectBackplane(options: {
 }) {
   const { app } = options;
   const { base, apiKey } = settings(options);
-  const headers = {
-    Authorization: "Bearer " + apiKey,
-    "Content-Type": "application/json",
-  };
-  async function failure(response: Response) {
-    const body = await response.text();
+  const authorization = "Bearer " + apiKey;
+  /** The daemon's error body `{ code, error }` as a `BackplaneError`. */
+  function faultOf(status: number, body: string) {
     let fault: { code?: ErrorCode; error?: string } = {};
     try {
       fault = JSON.parse(body) ?? {};
@@ -106,29 +105,33 @@ export async function connectBackplane(options: {
       fault.code && Object.hasOwn(statuses, fault.code)
         ? fault.code
         : "INTERNAL_ERROR",
-      typeof fault.error === "string"
-        ? fault.error
-        : "Backplane HTTP " + response.status,
-      response.status,
+      typeof fault.error === "string" ? fault.error : "Backplane HTTP " + status,
+      status,
     );
   }
-  async function post(path: string, body?: string) {
-    const response = await fetch(base + path, {
-      method: "POST",
-      headers,
-      body,
-      redirect: "error",
-    });
-    if (!response.ok) throw await failure(response);
-    return response;
+  const failure = async (response: Response) => faultOf(response.status, await response.text());
+  /** A failed RPC or schema request carries `status` and `body` since defuss-rpc 4.2.0; network and guard errors stay
+   * as they are. */
+  function rethrow(error: unknown): never {
+    const { status, body } = (error ?? {}) as { status?: unknown; body?: unknown };
+    throw typeof status === "number" && typeof body === "string" ? faultOf(status, body) : error;
   }
-  const schema: { moduleName?: string; methods: Record<string, unknown> }[] =
-    await (await post("/rpc/schema")).json();
+  // A 307 would re-send a call's arguments to another address, where fetch drops only the Authorization header, so
+  // every request of the context, the schema request included, refuses redirects.
+  const context = createRpcContext({
+    baseUrl: base,
+    headers: { Authorization: authorization },
+    fetch: (input, init) => fetch(input, { ...init, redirect: "error" }),
+  });
+  const schema = await context.getSchema().catch(rethrow);
   const methods = new Set(
     schema.flatMap((m) =>
-      Object.keys(m.methods).map((k) => m.moduleName + "." + k),
+      Object.keys(m.methods).map((k) => (m.kind === "module" ? m.moduleName : m.className) + "." + k),
     ),
   );
+  type Caller = (...args: unknown[]) => Promise<unknown>;
+  // Built from the schema in hand, so a connection sends one schema request.
+  const rpc = await context.getRpcClient<Record<string, Record<string, Caller>>>({ schema });
   function ensure(method: string) {
     if (!methods.has(method))
       throw new Error("Method missing from server schema");
@@ -139,11 +142,7 @@ export async function connectBackplane(options: {
     args: unknown[],
   ): Promise<T> {
     ensure(className + "." + methodName);
-    const response = await post(
-      "/rpc",
-      DSON.stringify({ className, methodName, args }),
-    );
-    return DSON.parse(await response.text()) as T;
+    return (await rpc[className][methodName](...args).catch(rethrow)) as T;
   }
   /** One log: the app's own, or one tenant's when `tenant` is given. The handle is also a defuss-logs batch writer, so
    * `createBatchSink(handle)` lets a defuss-logs logger in the application write here. VERIFIED by probe: DSON text
@@ -274,7 +273,7 @@ export async function connectBackplane(options: {
               const response = await fetch(object(key), {
                 method: "PUT",
                 headers: {
-                  Authorization: headers.Authorization,
+                  Authorization: authorization,
                   "Content-Type": "application/octet-stream",
                   ...condition,
                 },
@@ -290,7 +289,7 @@ export async function connectBackplane(options: {
               // The schema check tells a missing object apart from a daemon without the VFS service.
               ensure("vfs.get");
               const response = await fetch(object(key), {
-                headers: { Authorization: headers.Authorization },
+                headers: { Authorization: authorization },
                 redirect: "error",
               });
               if (response.status === 404) {
