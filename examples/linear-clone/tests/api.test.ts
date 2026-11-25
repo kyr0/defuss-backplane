@@ -8,7 +8,8 @@ import { parseFault } from "../src/core/faults.ts";
 import type { Seed } from "../src/core/seed.ts";
 import type { Api } from "../src/server/api.ts";
 import { loadConfig } from "../src/server/config.ts";
-import { MAX_ATTACHMENT_BYTES, type Server, startServer, uploadIdOf } from "../src/server/server.ts";
+import { uploadIdOf } from "../src/core/ids.ts";
+import { MAX_ATTACHMENT_BYTES, type Server, startServer } from "../src/server/server.ts";
 import { type Daemon, freePort, startDaemon } from "./helpers/daemon.ts";
 
 const seed: Seed = await Bun.file(new URL("../input/seed.json", import.meta.url)).json();

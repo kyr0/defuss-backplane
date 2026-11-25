@@ -28,11 +28,7 @@ Wrap: EVERY lead becomes a test | .vae/VERIFY.py rule | one MEMORY line with BC,
 2026-11-24T19:30:26Z s=dcdb118f FINDING src/telemetry.ts:quiet learn=none: VERIFIED: reproducing it needs a handler that outlives the 3 s drain; the guard is one try/catch at the only write sites.
 2026-11-24T19:30:26Z s=dcdb118f FINDING tests/scheduler.test.ts worker test learn=none: VERIFIED: not reproduced, so neither the cause nor a fix is established.
 2026-11-24T20:03:40Z s=dcdb118f FINDING defuss-rpc console lines learn=none: VERIFIED: an upstream hook is needed; README and ARCH say these lines reach stdout and stderr only.
-2026-11-24T21:11:49Z s=dcdb118f FINDING src/callbacks.ts:call result learn=test: VERIFIED: tests/callbacks.test.ts expects {status:200,result:{ok:true}}.
-2026-11-24T21:11:49Z s=dcdb118f FINDING src/scheduler.ts:schedulerApi claim learn=test: VERIFIED: tests/callbacks.test.ts covers the reserved handler, the bad URLs and the worker claim.
 2026-11-24T21:11:49Z s=dcdb118f FINDING src/callbacks.ts security boundary learn=none: VERIFIED: ARCH.md security section states the boundary; the tests cover rejection.
-2026-11-24T21:11:49Z s=dcdb118f FINDING tests/scheduler.test.ts:'schedules are shared by RPC and MCP, and the client queue runs a worker' learn=test: VERIFIED: the test itself now cannot see a pre-edit run; 5 consecutive runs passed.
-2026-11-24T22:27:56Z s=dcdb118f DONE fp=99ab5cc09bff cov=98.0% paths=plans/2026-11-24_22-24_linear-clone-example.md
 2026-11-24T22:27:56Z s=dcdb118f FINDING plans/2026-11-24_22-24_linear-clone-example.md:13 P07 learn=none: VERIFIED: a one-off wording defect in a plan page; no mechanical recurrence check fits.
 2026-11-24T22:27:56Z s=dcdb118f FINDING plans/2026-11-24_22-24_linear-clone-example.md:17 B01 learn=none: VERIFIED: claim narrowed to its evidence.
 2026-11-24T22:27:56Z s=dcdb118f FINDING plans/2026-11-24_22-24_linear-clone-example.md:21 B01 learn=none: VERIFIED: attribution corrected.
@@ -42,12 +38,8 @@ Wrap: EVERY lead becomes a test | .vae/VERIFY.py rule | one MEMORY line with BC,
 2026-11-24T22:27:56Z s=dcdb118f FINDING plans/2026-11-24_22-24_linear-clone-example.md:23 B09 learn=none: VERIFIED: version pinned to the project's own pin.
 2026-11-24T22:27:56Z s=dcdb118f FINDING plans/2026-11-24_22-24_linear-clone-example.md:159 B01 learn=none: VERIFIED: sources added.
 2026-11-24T22:27:56Z s=dcdb118f FINDING plans/2026-11-24_22-24_linear-clone-example.md:152 P07 learn=none: VERIFIED: modality made explicit.
-2026-11-24T22:31:46Z s=dcdb118f DONE fp=cc82a7f6d8ca cov=98.0% paths=plans/2026-11-24_22-24_linear-clone-example.md
 2026-11-24T22:31:46Z s=dcdb118f FINDING plans/2026-11-24_22-24_linear-clone-example.md:41 B01 learn=none: VERIFIED: the plan now states the probed contract; M3's MCP test will exercise it.
-2026-11-24T22:39:46Z s=dcdb118f DONE fp=d80e7140c518 cov=98.0% paths=plans/2026-11-24_22-24_linear-clone-example.md
 2026-11-24T22:39:46Z s=dcdb118f FINDING plans/2026-11-24_22-24_linear-clone-example.md:20,32,43 B09 learn=none: VERIFIED: plan text aligned with the upstream state.
-2026-11-25T00:34:14Z s=dcdb118f DONE fp=1870a7af1824 cov=98.0% paths=ARCH.md,CHANGELOG.md,bun.lock,package.json(+2)
-2026-11-25T00:34:14Z s=dcdb118f FINDING package.json dependencies learn=test: VERIFIED: the existing suite and e2e exercise every route, MCP tool and RPC module on the new versions.
 2026-11-25T00:34:14Z s=dcdb118f FINDING src/client.ts:1 and ARCH.md:8 (reuse decision) learn=none: VERIFIED: the rationale now matches observed behaviour of the released versions.
 2026-11-25T00:34:14Z s=dcdb118f FINDING ARCH.md:45 B09 learn=none: VERIFIED: claim removed with its basis.
 2026-11-25T00:34:14Z s=dcdb118f FINDING plans/2026-11-24_22-24_linear-clone-example.md:20,21,41-43 B09 learn=none: VERIFIED: plan facts match npm.
@@ -106,3 +98,11 @@ Wrap: EVERY lead becomes a test | .vae/VERIFY.py rule | one MEMORY line with BC,
 2026-11-25T05:39:04Z s=dcdb118f FINDING examples/linear-clone/src/server/jobs.ts:upsertSchedules + server.ts learn=test: VERIFIED: restart test checks URL, revision and the unchanged outcome.
 2026-11-25T05:39:04Z s=dcdb118f FINDING examples/linear-clone/tests/jobs.test.ts (delivery) learn=test: VERIFIED: passes against the daemon child process.
 2026-11-25T05:39:04Z s=dcdb118f FINDING examples/linear-clone/src/server/config.ts:DIGEST_CRON|ROLLOVER_CRON learn=test: VERIFIED: config tests.
+2026-11-25T05:53:40Z s=dcdb118f DONE fp=b8cedf58d025 cov=98.0% paths=examples/linear-clone/Makefile,examples/linear-clone/bun.lock,examples/linear-clone/input/seed.json,examples/linear-clone/package.json(+27)
+2026-11-25T05:53:40Z s=dcdb118f FINDING examples/linear-clone/src/web/index.html + tracker.css learn=none: VERIFIED: extraction counts printed; screenshots of list, issue page, cycles and inbox show live data.
+2026-11-25T05:53:40Z s=dcdb118f FINDING examples/linear-clone/scripts/e2e.ts learn=test: VERIFIED: make e2e passes, 3 checks.
+2026-11-25T05:53:40Z s=dcdb118f FINDING examples/linear-clone/src/core/issue.ts:startedAt learn=test: VERIFIED: core tests for start, keep and clear, and the burn-up's started column.
+2026-11-25T05:53:40Z s=dcdb118f FINDING examples/linear-clone/src/core/seed.ts:shiftSeed ms learn=test: VERIFIED: workspace test expects Marco's comment 12 minutes before now.
+2026-11-25T05:53:40Z s=dcdb118f FINDING examples/linear-clone/src/web/views/cycles.ts learn=none: VERIFIED: the cycles screenshot shows 15 scope, 8 started, 3 completed, 9 of 14 days left.
+2026-11-25T05:53:40Z s=dcdb118f FINDING examples/linear-clone/src/web/main.ts learn=test: VERIFIED: routes pass in three browsers without console errors; interactions are covered by M7.
+2026-11-25T05:53:40Z s=dcdb118f FINDING examples/linear-clone/src/core/stats.ts:currentCycle, src/core/ids.ts:uploadIdOf learn=test: VERIFIED: api and jobs tests pass.

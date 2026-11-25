@@ -5,7 +5,7 @@ import { BackplaneError } from "defuss-backplane/client";
 import { type Fault, faultMessage } from "../core/faults.ts";
 import { parseIssueId } from "../core/ids.ts";
 import { type Fields, InvalidInput } from "../core/issue.ts";
-import type { Cycle } from "../core/stats.ts";
+import { currentCycle } from "../core/stats.ts";
 import { createJobs } from "./jobs.ts";
 import type { Log } from "./log.ts";
 import { NotFound, type Workspace } from "./workspace.ts";
@@ -49,15 +49,6 @@ function withFaults<T extends Record<string, Record<string, (...args: never[]) =
 function issueRef(id: unknown) {
   if (!parseIssueId(id)) throw new InvalidInput("id", "must be an issue ID such as ENG-142");
   return id as string;
-}
-
-/** The cycle that contains today, else the most recent one that started. */
-export function currentCycle(cycles: readonly Cycle[], today: string) {
-  return (
-    cycles.find((c) => c.start <= today && today <= c.end) ??
-    cycles.filter((c) => c.start <= today).sort((a, b) => b.number - a.number)[0] ??
-    null
-  );
 }
 
 export function createApi({ ws, viewer, workspace, timeZone, log }: ApiContext) {

@@ -32,6 +32,7 @@ const issue = (over: Partial<Issue> & { number: number }): Issue => ({
   subtasks: [],
   createdAt: "2026-09-20T08:00:00.000Z",
   updatedAt: "2026-09-20T08:00:00.000Z",
+  startedAt: null,
   completedAt: null,
   ...over,
 });
@@ -138,6 +139,11 @@ describe("drafts and patches", () => {
     expect(closed).toMatchObject({ status: "done", completedAt: now.toISOString(), updatedAt: now.toISOString() });
     const reopened = applyPatch(closed, { status: "review" }, new Date("2026-10-03T10:00:00Z")).issue;
     expect(reopened.completedAt).toBeNull();
+    // Started stays from the first start while the issue stays past todo, and clears on the way back.
+    const begun = applyPatch(issue({ number: 2 }), { status: "progress" }, now).issue;
+    expect(begun.startedAt).toBe(now.toISOString());
+    expect(applyPatch(begun, { status: "review" }, new Date("2026-10-04T10:00:00Z")).issue.startedAt).toBe(now.toISOString());
+    expect(applyPatch(begun, { status: "todo" }, now).issue.startedAt).toBeNull();
     // An unchanged value is no change and leaves the issue as it was.
     expect(applyPatch(open, { status: "progress", labels: [] }, now)).toEqual({ issue: open, changes: [] });
   });
@@ -156,8 +162,8 @@ describe("drafts and patches", () => {
 
 describe("cycle statistics", () => {
   const issues = [
-    issue({ number: 1, status: "done", assignee: "aron", completedAt: "2026-09-29T09:00:00Z" }),
-    issue({ number: 2, status: "review", assignee: "aron" }),
+    issue({ number: 1, status: "done", assignee: "aron", startedAt: "2026-09-28T09:00:00Z", completedAt: "2026-09-29T09:00:00Z" }),
+    issue({ number: 2, status: "review", assignee: "aron", startedAt: "2026-09-30T09:00:00Z" }),
     issue({ number: 3, status: "progress", assignee: "anna", createdAt: "2026-09-30T12:00:00Z" }),
     issue({ number: 4, status: "todo" }),
     issue({ number: 5, status: "backlog", assignee: "anna" }),
@@ -176,11 +182,11 @@ describe("cycle statistics", () => {
   test("the burn-up has one point per day up to today, with scope by creation and done by completion", () => {
     const { burnup } = cycleStats(cycle24, issues, "2026-10-01", "UTC");
     expect(burnup.map((p) => p.date)).toEqual(["2026-09-28", "2026-09-29", "2026-09-30", "2026-10-01"]);
-    expect(burnup.map((p) => [p.scope, p.done])).toEqual([
-      [4, 0],
-      [4, 1],
-      [5, 1],
-      [5, 1],
+    expect(burnup.map((p) => [p.scope, p.started, p.done])).toEqual([
+      [4, 1, 0],
+      [4, 1, 1],
+      [5, 2, 1],
+      [5, 2, 1],
     ]);
   });
 

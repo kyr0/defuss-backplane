@@ -53,6 +53,8 @@ describe("seed", () => {
     // 53 days after 2026-10-03.
     expect(cycle).toMatchObject({ start: "2026-11-20", end: "2026-12-03" });
     expect((await later.issues.get("ENG-142")).issue.due).toBe("2026-11-26");
+    // VERIFIED: the scaffold shows Marco's comment on ENG-142 as 12 minutes old.
+    expect((await later.comments.list("ENG-142"))[0]!.createdAt).toBe("2026-11-25T07:48:00.000Z");
     await later.close();
   });
 });

@@ -30,11 +30,15 @@ export type Issue = {
   /** A calendar date, `YYYY-MM-DD`. */
   due: string | null;
   subtasks: Subtask[];
-  /** ISO instants. `completedAt` is set while the status is `done`. */
+  /** ISO instants. `startedAt` is set while the status is past `todo`, `completedAt` while it is `done`. */
   createdAt: string;
   updatedAt: string;
+  startedAt: string | null;
   completedAt: string | null;
 };
+
+/** VERIFIED: the scaffold counts `progress`, `review` and `done` as started. */
+export const isStarted = (status: Status) => status !== "backlog" && status !== "todo";
 
 /** What a caller may set. */
 export type Fields = Pick<
@@ -161,6 +165,8 @@ export function applyPatch(issue: Issue, patch: Patch, now: Date): { issue: Issu
   next.updatedAt = now.toISOString();
   if (next.status === "done" && issue.status !== "done") next.completedAt = next.updatedAt;
   if (next.status !== "done") next.completedAt = null;
+  if (isStarted(next.status) && !isStarted(issue.status)) next.startedAt = next.updatedAt;
+  if (!isStarted(next.status)) next.startedAt = null;
   return { issue: next, changes };
 }
 

@@ -10,6 +10,12 @@ export function issueId(team: string, number: number) {
   return team + "-" + number;
 }
 
+/** An attachment upload's ID, `<issue>.<random>`. VERIFIED: by probe, a defuss-rpc upload handler's metadata holds the
+ * upload ID and the file name but no request headers, so the issue travels in the ID. */
+export const uploadIdOf = (issue: string) => issue + "." + crypto.randomUUID();
+/** The issue of an upload ID; "" when it has none. */
+export const issueOfUpload = (uploadId: string) => (uploadId.includes(".") ? uploadId.slice(0, uploadId.indexOf(".")) : "");
+
 /** The team and number of an issue ID, or null for anything else. */
 export function parseIssueId(id: unknown): { team: string; number: number } | null {
   if (typeof id !== "string") return null;

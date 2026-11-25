@@ -6,15 +6,20 @@
       "name": "linear-clone",
       "dependencies": {
         "defuss-backplane": "file:./deps/defuss-backplane",
+        "defuss-dom-router": "0.1.1",
+        "defuss-i18n": "0.2.0",
         "defuss-logs": "0.3.0",
         "defuss-mcp": "0.6.2",
         "defuss-rpc": "4.3.0",
         "defuss-serve": "0.4.0",
+        "defuss-shadcn": "0.10.1",
+        "lucide": "1.79.0",
       },
       "devDependencies": {
         "@modelcontextprotocol/client": "2.4.0",
         "@types/bun": "1.4.5",
         "oxlint": "1.94.0",
+        "playwright-core": "1.65.1",
         "typescript": "5.9.3",
       },
     },
@@ -404,9 +409,13 @@
 
     "defuss-dbsonl": ["defuss-dbsonl@0.9.0", "", { "dependencies": { "@lickle/lock": "0.0.1", "defuss-dson": "1.5.1", "defuss-storage": "0.4.1" } }, "sha512-yARo5Wtl4f2Y0EHe1jxet0lT6+eDv/AELVxugoZrIB+4O+9C4F/9b7QJZtswCTDuKmV/SIop4+R6vfz6zebhDQ=="],
 
+    "defuss-dom-router": ["defuss-dom-router@0.1.1", "", {}, "sha512-tpCqkNYX55TiGnEU2Kni9x6jZV4fksVRhZ5zDRH8CVHLMobknw7PNDKNUkMJ3g+98r7LmnZVxZqtO7dYcLRZ9A=="],
+
     "defuss-dson": ["defuss-dson@1.5.1", "", {}, "sha512-Lm+nBTceq1nK2UepjVdtSBBR9guH8bSyZWpqv4dLfvvUS674SdlSPmiB8GDOrw+XfeitvAkUtezHjmX5fHPY/Q=="],
 
     "defuss-env": ["defuss-env@1.0.3", "", { "bin": { "defuss-env": "dist/cli.mjs" } }, "sha512-4Q7rfBLD18i3DDbwSekg5YV9My9wA8rEIvqe6ZY/BTFNET6FMQIgbX5TzIYuV0yA4hTH0oyp/j+a9Nsev5fyjA=="],
+
+    "defuss-i18n": ["defuss-i18n@0.2.0", "", { "peerDependencies": { "defuss-morph": "^0.1.1", "defuss-query": "^0.1.0" } }, "sha512-ppZRhF5g2E0umpoD3Fl+ZSrhv6U1hWK06muiUsFaoMqeTxn7AjhkmfKm3UQG9uq3nxNeRXHS41+p6F8fLuTKjA=="],
 
     "defuss-lexicalsearch": ["defuss-lexicalsearch@0.4.0", "", {}, "sha512-ODWEKdUo9kryOOMQJfB7dThF8ZySCJNIWsQpBgkaSbxtKj6tLmUQspoVe3LQE6xwH91vYgSns5ITNgnfMqzkmg=="],
 
@@ -414,9 +423,13 @@
 
     "defuss-mcp": ["defuss-mcp@0.6.2", "", { "dependencies": { "@modelcontextprotocol/node": "2.1.2", "@modelcontextprotocol/server": "2.4.0", "ajv": "8.20.0", "ajv-formats": "3.0.1", "defuss-dson": "1.5.1" }, "peerDependencies": { "typescript": ">=5.9 <7" }, "optionalPeers": ["typescript"], "bin": { "defuss-mcp": "bin/contracts.mjs" } }, "sha512-/S3uxIYY9xL05jZYLr16zJ5K3ovjJGDUEDNRjaradfhl4WnCIYUJilgz/YmuaQQAoezTvV8U99mTLsDJ0LsKYQ=="],
 
+    "defuss-morph": ["defuss-morph@0.1.1", "", {}, "sha512-mAIL1Mqbvlr6+AMJohM1FRRn8k3m6G+bn0L6G2K00ZKIcPxPidiiJdhJAEewyZDHNbElbP+txSTr9i4Z1pEbWg=="],
+
     "defuss-multicore": ["defuss-multicore@0.1.0", "", {}, "sha512-bIlt3E8EYPqhpnFxzFKZ2RnLhuiU3dokF1jtDQQcq0imoi2L1i3zta4oOynTti36aswarDIMki1XA62V7ZTYdg=="],
 
     "defuss-o11y": ["defuss-o11y@0.3.0", "", { "dependencies": { "@opentelemetry/api": "1.10.0", "@opentelemetry/core": "3.1.1", "@opentelemetry/exporter-metrics-otlp-http": "0.301.2", "@opentelemetry/exporter-prometheus": "0.301.2", "@opentelemetry/otlp-exporter-base": "0.301.2", "@opentelemetry/otlp-transformer": "0.301.2", "@opentelemetry/resources": "3.1.1", "@opentelemetry/sdk-metrics": "3.1.1" } }, "sha512-+q83sQJZqSy4y0Iqh9NzD/uZmcJezyv3Yt+FJ17EDvDbSWmb/4ksaTHp6YqLDtM4FkQ2gI4r5UpHC2cH2lx2LA=="],
+
+    "defuss-query": ["defuss-query@0.1.0", "", { "peerDependencies": { "defuss-morph": "^0.1.1" } }, "sha512-siwnM1kgqj+y5zFNV1fNn2XFoUbQWoJkg93Hq1BZFL7YIwTvc/EduetIkvR4WepJQF/UmR6oRz5RaLY1zx2fNA=="],
 
     "defuss-rpc": ["defuss-rpc@4.3.0", "", { "dependencies": { "defuss-dson": "^1.2.0", "ts-morph": "^28.0.0" }, "peerDependencies": { "@types/express": ">=5.0.0", "bunway": ">=1.1.0", "express": ">=5.0.0" }, "optionalPeers": ["@types/express", "bunway", "express"], "bin": { "defuss-rpc": "dist/cli.mjs" } }, "sha512-9CnTZPSl6pXoCHQ3SyI1rZHSAAV3gpnaSqNkPBeojJ6Ehzrra2in0QuN1cd3V/iIkRlbRx1hu0mv1kEafnlljw=="],
 
@@ -426,7 +439,11 @@
 
     "defuss-serve": ["defuss-serve@0.4.0", "", {}, "sha512-LF/2LWq3mbbO253Zz+0pdt3RB+ZcV4Qv7BAp1j0r2seDu5bFHl5tGUmdKeU5P3jnI/bGqftaPMykBdx/7oqc1A=="],
 
+    "defuss-shadcn": ["defuss-shadcn@0.10.1", "", { "dependencies": { "defuss-dataview": "0.10.0", "defuss-morph": "0.2.0", "defuss-query": "0.2.0", "defuss-store": "0.1.0" } }, "sha512-EhNqmX2zRDAHbK9FA6hZ9bOrg6jaNTpVileDRKDvu1cqW3N0rCKVAhlJL1e2Coz6gbUPLzqJKzdtFG5ep+gmCA=="],
+
     "defuss-storage": ["defuss-storage@0.4.1", "", {}, "sha512-C+p8PBqeAhCefACA/dKxVR9ZmAMIaLb7R30UiuA850gFUyP8gMJxsWa9qC4tsYeqhq8VUrz23NZFcxDR+QVD9w=="],
+
+    "defuss-store": ["defuss-store@0.1.0", "", {}, "sha512-1FaR2bO8Zz8MyD95v1/+NXKcxsWarq3p1vazlwWfvW/JBWUcM/srvxNLFgFs2tUQh8bLLQUmYiZxCguTvLs85Q=="],
 
     "defuss-vectorsearch": ["defuss-vectorsearch@0.4.0", "", { "dependencies": { "@huggingface/tokenizers": "0.2.0", "@huggingface/transformers": "^3.8.1", "defuss-brotli": "0.3.0", "defuss-db": "^2.0.0", "defuss-multicore": "0.1.0", "onnxruntime-web": "1.30.0" }, "peerDependencies": { "onnxruntime-node": "1.21.0" }, "optionalPeers": ["onnxruntime-node"] }, "sha512-uwjfxu8qWhnJ7hB0tvIPRi7eRivXyEMvWVNj8G15DIZvTT8/Zpy1CrcGJ5DHyMDWOjs2gkBJYs5rMWnZdiUHtQ=="],
 
@@ -524,6 +541,8 @@
 
     "long": ["long@5.3.2", "", {}, "sha512-mNAgZ1GmyNhD7AuqnTG3/VQ26o760+ZYBPKjPvugO8+nLbYfX6TVpJPseBvopbdY+qpZ/lKUnmEc1LeZYS3QAA=="],
 
+    "lucide": ["lucide@1.79.0", "", {}, "sha512-y96g6/Pca8ZoMt1F8P2K3T5t1ABrFDeJW5h7IM2CyAGton1lbdMzHn4u0qAGI0j9nZ2OArUTqekDZyBTW2pRUQ=="],
+
     "magic-string": ["magic-string@1.4.5", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.6.0" } }, "sha512-oLLC2+YvQUfAa+vxoufE/yc1icb87M9iXIRqAoR/2EhE/8cb3SF/+Gi0c2By1B+5Vz2e2vQtUvHiu1+63Znh+w=="],
 
     "matcher": ["matcher@3.0.0", "", { "dependencies": { "escape-string-regexp": "^4.0.0" } }, "sha512-OkeDaAZ/bQCxeFAozM55PKcKU0yJMPGifLwV4Qgjitu+5MoAfSQN4lsLJeXZ1b8w0x+/Emda6MZgXS1jvsapng=="],
@@ -571,6 +590,8 @@
     "pkgroll": ["pkgroll@2.29.1", "", { "dependencies": { "@rollup/plugin-alias": "^6.0.0", "@rollup/plugin-commonjs": "^29.0.3", "@rollup/plugin-dynamic-import-vars": "^2.1.5", "@rollup/plugin-json": "^6.1.0", "@rollup/plugin-node-resolve": "^16.0.3", "cjs-module-lexer": "^2.2.1", "esbuild": "^0.28.2", "magic-string": "^1.2.2", "rollup": "^4.62.5", "rollup-plugin-import-trace": "^1.0.1", "rollup-pluginutils": "^2.8.2", "signal-exit": "4.1.0", "yaml": "^2.9.0" }, "peerDependencies": { "@typescript/typescript6": "^6", "typescript": "^4.1 || ^5.0 || ^6.0 || ^7.0" }, "optionalPeers": ["@typescript/typescript6", "typescript"], "bin": { "pkgroll": "dist/cli.mjs" } }, "sha512-2zQ1E1tPVxZtQz9wN+uTetJZKwj548xQGyAlWgVkhge31pJBt4R8poDrkWVvuYNkosrjpL8i6op5gBGWJyOEQg=="],
 
     "platform": ["platform@1.3.6", "", {}, "sha512-fnWVljUchTro6RiCFvCXBbNhJc2NijN7oIQxbwsyL0buWJPG85v81ehlHI9fXrJsMNgTofEoWIQeClKpgxFLrg=="],
+
+    "playwright-core": ["playwright-core@1.65.1", "", { "bin": { "playwright-core": "cli.js" } }, "sha512-hqPpz7blSMPxWVdoeE1yiBSzXsKiVOd2k+kjCvmUywD2GPO2Dd9HfcWnq9NN0GHbNZDFgZ9JfBFr+X5/BLo0qw=="],
 
     "promise-limit": ["promise-limit@2.7.0", "", {}, "sha512-7nJ6v5lnJsXwGprnGXga4wx6d1POjvi5Qmf1ivTRxTjH4Z/9Czja/UCMLVmB9N93GeWOU93XaFaEt6jbuoagNw=="],
 
@@ -659,6 +680,10 @@
     "defuss-logs/defuss-brotli": ["defuss-brotli@0.1.3", "", {}, "sha512-/PGDcJoz5b4Zi5HzgxoaVceMIUeOLV4iKrikQf69EbZjNgrq42r2mw2Vkp9Y1y9Ltb6FNRWY38VgpsoeC3JuvQ=="],
 
     "defuss-logs/defuss-dbsonl": ["defuss-dbsonl@0.10.0", "", { "dependencies": { "@lickle/lock": "0.0.1", "defuss-dson": "1.5.1", "defuss-storage": "0.4.1" } }, "sha512-VRKHoSoTJSIXZrppDaen5i8SZbu5XkhCyDyc4K9bfFJf80xgXzNTJoe4A1q+vbyauHJSv+jwQsnYEMhLP/8tMQ=="],
+
+    "defuss-shadcn/defuss-morph": ["defuss-morph@0.2.0", "", {}, "sha512-QMzZL3zMB100dTycyE7NJ1ey7KE8iap7CpfXrZ+tXu+tzoWugVJdMPr7v7pm+ce8iPjLLaYgTqAUG9p35U9cKQ=="],
+
+    "defuss-shadcn/defuss-query": ["defuss-query@0.2.0", "", { "peerDependencies": { "defuss-morph": "^0.2.0" } }, "sha512-S18fLhxZXS8WTRXBqy0EQ9FZnecF6v1KEiGAoONjCQjOiJ5GiBY2ejiU+L0BIdDUkS1KYGi8KGZ4suC6l7r6lQ=="],
 
     "defuss-vectorsearch/defuss-db": ["defuss-db@2.0.2", "", { "dependencies": { "@libsql/client": "^0.15.7", "defuss-env": "^1.0.2", "dexie": "^4.0.11", "fake-indexeddb": "^6.0.1", "mongodb": "^6.16.0" } }, "sha512-HR4IfBOd7MYMwt68GBi+aEn+HyoV+eKfeTCn34kBKI8KejvqldZRvwr0S3i6Y77WjJwE5niuBc4BEsZswNrdeA=="],
 

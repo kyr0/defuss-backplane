@@ -20,11 +20,11 @@ export type Seed = {
 };
 
 const DAY_MS = 86_400_000;
-const instant = (value: string, days: number) => new Date(Date.parse(value) + days * DAY_MS).toISOString();
+const instant = (value: string, ms: number) => new Date(Date.parse(value) + ms).toISOString();
 const date = (value: string | null, days: number) => (value === null ? null : addDays(value, days));
 
-/** The seed with every date and instant moved by `days`. */
-export function shiftSeed(seed: Seed, days: number): Seed {
+/** The seed with every date moved by `days` and every instant by `ms`, by default the same days. */
+export function shiftSeed(seed: Seed, days: number, ms = days * DAY_MS): Seed {
   if (!isDate(seed.today)) throw new TypeError("seed.today must be a date YYYY-MM-DD");
   return {
     ...seed,
@@ -34,13 +34,14 @@ export function shiftSeed(seed: Seed, days: number): Seed {
     issues: seed.issues.map((i) => ({
       ...i,
       due: date(i.due, days),
-      createdAt: instant(i.createdAt, days),
-      updatedAt: instant(i.updatedAt, days),
-      completedAt: i.completedAt === null ? null : instant(i.completedAt, days),
+      createdAt: instant(i.createdAt, ms),
+      updatedAt: instant(i.updatedAt, ms),
+      startedAt: i.startedAt === null ? null : instant(i.startedAt, ms),
+      completedAt: i.completedAt === null ? null : instant(i.completedAt, ms),
     })),
-    comments: seed.comments.map((c) => ({ ...c, createdAt: instant(c.createdAt, days) })),
-    events: seed.events.map((e) => ({ ...e, at: instant(e.at, days) })),
-    notifications: seed.notifications.map((n) => ({ ...n, at: instant(n.at, days) })),
+    comments: seed.comments.map((c) => ({ ...c, createdAt: instant(c.createdAt, ms) })),
+    events: seed.events.map((e) => ({ ...e, at: instant(e.at, ms) })),
+    notifications: seed.notifications.map((n) => ({ ...n, at: instant(n.at, ms) })),
   };
 }
 

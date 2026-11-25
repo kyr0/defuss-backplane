@@ -1,6 +1,6 @@
 # Plan: the linear-clone example app
 
-Status: in progress. M0 to M4 are done.
+Status: in progress. M0 to M5 are done; M6 is built and waits for its proof, M7.
 
 Tick a milestone `- [x]` when its proof passes, then run `verify` on its scope.
 
@@ -129,7 +129,10 @@ flowchart LR
     - a repeated call creates nothing new;
     - a restart on another port updates the payload URL;
     - with `DIGEST_CRON` set to every second, the real backplane delivers a callback and an inbox item appears.
-- [ ] **M5 Frontend shell.**
+- [x] **M5 Frontend shell.**
+  - A one-off extraction took the shell, the templates and the styles from defuss-shadcn 0.10.1's full-screen page (`docs/application/app-issue-tracker.html`), without the 15 pre-rendered issues, pages, notes, people, projects and other cycles. The inbox note, the assignee row and the project row became templates (`pm-tpl-note`, `pm-tpl-person`, `pm-tpl-project`), avatars show initials, and the issue template gained sub-issues and attachments.
+  - VERIFIED: the app bundle has no `file-input`; the build copies `dist/components/file-input/file-input.min.css`, and the plain file input needs no script.
+  - `scripts/e2e.ts` runs with Node.js: it deploys `dist/` and the seed into a temporary directory, starts the real backplane and `bun dist/server.js` there, and opens every route in Chromium, Firefox and WebKit without console errors.
   - `src/web/index.html`: the scaffold shell and templates without the demo issues.
   - `src/web/tracker.css`: the scaffold's styles.
   - `src/web/main.ts`: i18n, router, RPC client and Lucide.
@@ -147,6 +150,7 @@ flowchart LR
     - inbox, cycles with the burn-up chart, projects;
     - the language and theme switches, which persist through `df$.store.persisted`.
   - A `REVISION_CONFLICT` shows a toast and reloads the issue.
+  - The issue model gained `startedAt`, which the burn-up's started series needs, and the seed shifts instants by the exact time since noon of its day, so the scaffold's "12m ago" stays 12 minutes.
   - Proof: M7.
 - [ ] **M7 Browser end-to-end.**
   - `scripts/e2e.ts` builds the artifact and starts the real backplane and the built server as child processes on temporary data.

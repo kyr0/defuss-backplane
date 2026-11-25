@@ -10,6 +10,7 @@ import {
   type Change,
   type Issue,
   InvalidInput,
+  isStarted,
   type Patch,
   validateComment,
   validateDraft,
@@ -202,6 +203,7 @@ export async function openWorkspace(options: {
           ...draft,
           createdAt: at,
           updatedAt: at,
+          startedAt: isStarted(draft.status) ? at : null,
           completedAt: draft.status === "done" ? at : null,
         };
         await issues.insert(issue);
@@ -227,7 +229,7 @@ export async function openWorkspace(options: {
           try {
             await issues.update(
               id,
-              { ...stored, updatedAt: issue.updatedAt, completedAt: issue.completedAt },
+              { ...stored, updatedAt: issue.updatedAt, startedAt: issue.startedAt, completedAt: issue.completedAt },
               { ifRevision: ifRevision ?? current.revision },
             );
           } catch (error) {
@@ -332,7 +334,8 @@ export async function openWorkspace(options: {
      * halfway leaves no team, and the next start completes the rest, skipping documents that exist. */
     async seed(seed: Seed) {
       if ((await teams.query({ limit: 1 })).rows.length) return false;
-      const demo = shiftSeed(seed, daysBetween(seed.today, today()));
+      // Dates move by whole days; instants by the time since noon of the seed's day, so "12m ago" stays 12 minutes.
+      const demo = shiftSeed(seed, daysBetween(seed.today, today()), now().getTime() - Date.parse(seed.today + "T12:00:00Z"));
       const groups: [Bucket<never>, object[]][] = [
         [people as Bucket<never>, demo.people],
         [projects as Bucket<never>, demo.projects],

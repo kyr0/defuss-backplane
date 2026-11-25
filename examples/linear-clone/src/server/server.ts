@@ -9,6 +9,7 @@ import { createServer } from "defuss-serve";
 import { mcpPlugin, rpcPlugin } from "defuss-serve/plugins";
 import { version } from "../../package.json" with { type: "json" };
 import { FAULTS, faultMessage, parseFault } from "../core/faults.ts";
+import { issueOfUpload } from "../core/ids.ts";
 import { validateFileName } from "../core/issue.ts";
 import type { Seed } from "../core/seed.ts";
 import { createApi, faultOf } from "./api.ts";
@@ -18,11 +19,6 @@ import { openWorkspace } from "./workspace.ts";
 
 /** Attachments are at most 25 MiB. The guard checks the size the client announces; the handler checks the bytes. */
 export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
-
-/** An upload names its issue in its ID, `<issue>.<random>`. VERIFIED: by probe, an upload handler's metadata holds the
- * upload ID and the file name but no request headers, so the issue cannot travel in a header. */
-export const uploadIdOf = (issue: string) => issue + "." + crypto.randomUUID();
-const issueOfUpload = (uploadId: string) => uploadId.slice(0, uploadId.indexOf("."));
 
 /** Gives a coded fault its HTTP status; defuss-rpc answers every thrown error with 500. */
 async function withStatus(response: Promise<Response>) {

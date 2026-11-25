@@ -1,7 +1,7 @@
 # The linear-clone app service: the defuss-vae verbs for humans, agents and the repository's gate.
 # Bun loads .env for every bun command, so one parser reads it; an include here would read `$` and `#` by Make's rules.
 NAME ?= linear-clone
-RUN  ?=
+RUN  ?= exec bun dist/server.js
 N    ?= 50
 export RUN
 # Installer default dirs as a fallback: recipes find tools that setup just installed, while tools on PATH keep precedence.
@@ -14,7 +14,7 @@ ROOT        = ../..
 BACKPLANE   = deps/defuss-backplane
 BACKPLANE_TGZ = $(ROOT)/output/defuss-backplane-$(shell node -p "require('$(ROOT)/package.json').version").tgz
 
-.PHONY: help setup start stop restart status log metrics bench test coverage lint e2e verify
+.PHONY: help setup build start stop restart status log metrics bench test coverage lint e2e verify
 .DEFAULT_GOAL := help
 
 help: ## list the verbs with their usage (default goal)
@@ -30,7 +30,10 @@ setup: ## install pinned tools, pack the backplane from the repository root, the
 	tar xzf $(BACKPLANE_TGZ) -C $(BACKPLANE) --strip-components=1
 	bun install --frozen-lockfile
 
-start: ## run RUN detached: pid in tmp/, stdout|stderr appended to var/log/
+build: ## bundle the server and the frontend into dist/
+	bun run build
+
+start: build ## run the built service detached: pid in tmp/, stdout|stderr appended to var/log/
 	@mkdir -p var/log tmp
 	@if $(ALIVE); then echo "running pid=$$(cat $(PID))"; exit 0; fi; \
 	[ -n "$$RUN" ] || { echo "UNKNOWN[start] BC RUN unset"; exit 6; }; \
@@ -68,6 +71,7 @@ coverage: ## measure line and function coverage; below 60 % it fails (bunfig.tom
 lint: ## run oxlint and the strict TypeScript checker
 	bun run lint
 
-e2e: ; @echo "UNKNOWN[e2e] BC undefined: the built app in Chromium, Firefox and WebKit"; exit 2  ## drive the built app in real browsers
+e2e: build ## drive the built app with the real backplane in Chromium, Firefox and WebKit
+	node scripts/e2e.ts
 
 verify: lint test coverage e2e ## run every verification verb, cheapest first

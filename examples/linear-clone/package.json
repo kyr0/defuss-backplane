@@ -8,20 +8,26 @@
   "type": "module",
   "packageManager": "bun@1.4.5",
   "scripts": {
-    "lint": "oxlint --deny-warnings src tests && tsc --noEmit",
+    "build": "bun scripts/build.ts",
+    "lint": "oxlint --deny-warnings src tests scripts && tsc --noEmit",
     "test": "bun test ./tests"
   },
   "dependencies": {
     "defuss-backplane": "file:./deps/defuss-backplane",
+    "defuss-dom-router": "0.1.1",
+    "defuss-i18n": "0.2.0",
     "defuss-logs": "0.3.0",
     "defuss-mcp": "0.6.2",
     "defuss-rpc": "4.3.0",
-    "defuss-serve": "0.4.0"
+    "defuss-serve": "0.4.0",
+    "defuss-shadcn": "0.10.1",
+    "lucide": "1.79.0"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "2.4.0",
     "@types/bun": "1.4.5",
     "oxlint": "1.94.0",
+    "playwright-core": "1.65.1",
     "typescript": "5.9.3"
   }
 }
