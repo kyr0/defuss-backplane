@@ -20,15 +20,8 @@ Wrap: EVERY lead becomes a test | .vae/VERIFY.py rule | one MEMORY line with BC,
 2026-11-22T21:44:39Z s=dcdb118f FINDING ARCH.md Scheduling P learn=none: Wording precision; not mechanically checkable.
 2026-11-22T21:44:39Z s=dcdb118f FINDING package.json:56 defuss-scheduler file:../defuss-scheduler learn=none: Depends on a human release decision for defuss-scheduler.
 2026-11-23T21:01:51Z s=dcdb118f FINDING ARCH.md:10, ARCH.md:68 B01/P learn=none: VERIFIED: wording against an upstream document; no rule kind can check it.
-2026-11-23T21:01:51Z s=dcdb118f FINDING README.md:15, README.md:112, README.md:202, CHANGELOG.md:5 learn=verifier: VERIFIED: the same backplane.registry-deps rule removes the condition these sentences described.
 2026-11-23T21:01:51Z s=dcdb118f FINDING src/tools.ts:446 schedulerTools history comment learn=none: VERIFIED: comment wording against an upstream document; no rule kind can check it.
-2026-11-23T22:42:45Z s=dcdb118f DONE fp=8f3788b61aa2 cov=98.8% paths=ARCH.md,CHANGELOG.md,README.md,bun.lock(+14)
-2026-11-23T22:42:45Z s=dcdb118f FINDING src/tools.ts:110 McpServer version, scripts/e2e.ts:27 and :331 learn=verifier: VERIFIED: rule backplane.version-sync in .vae/VERIFY.py fails when src/tools.ts or scripts/e2e.ts disagree with package.json; a probe with 0.2.9 in tools.ts mad
-2026-11-23T23:02:25Z s=dcdb118f DONE fp=2ace88988c3b cov=98.8% paths=ARCH.md,CHANGELOG.md,bun.lock,package.json(+5)
-2026-11-23T23:02:25Z s=dcdb118f FINDING src/server.ts listen close(), src/tools.ts makeTools learn=test: VERIFIED: tests/scheduler.test.ts 'two daemons in one process serve only their own functions and data' runs a scheduling and a plain daemon at once and checks s
 2026-11-23T23:02:25Z s=dcdb118f FINDING ARCH.md:8, ARCH.md:20, ARCH.md:36, src/client.ts:1, src/services.ts:1 learn=none: VERIFIED: version wording against upstream source; no rule kind can check it.
-2026-11-23T23:02:25Z s=dcdb118f FINDING scripts/e2e.ts npm install --prefer-offline learn=memory: VERIFIED: .vae/MEMORY.md line scoped to the e2e npm install records the refresh command.
-2026-11-24T18:07:50Z s=dcdb118f DONE fp=3a7e1c0eb823 cov=98.5% paths=ARCH.md,CHANGELOG.md,README.md,bun.lock(+13)
 2026-11-24T18:07:50Z s=dcdb118f FINDING src/client.ts download size, src/transfer.ts object/files headers learn=test: VERIFIED: the existing expect(read).toMatchObject(stored) in tests/http.test.ts now runs against defuss-serve on Bun and fails without x-size.
 2026-11-24T18:07:50Z s=dcdb118f FINDING src/server.ts listen, listener address check learn=none: VERIFIED: defuss-serve binds the configured 127.0.0.1, so no test can make the address differ; lsof in the packed-consumer test checks the listener.
 2026-11-24T18:07:50Z s=dcdb118f FINDING ARCH.md Security paragraph, upload abort claim learn=test: VERIFIED: the new test promises 4 MiB, sends 64 KiB, drops the socket and checks the old revision and a later upload.
@@ -106,3 +99,10 @@ Wrap: EVERY lead becomes a test | .vae/VERIFY.py rule | one MEMORY line with BC,
 2026-11-25T04:57:07Z s=dcdb118f FINDING examples/linear-clone/package.json learn=none: VERIFIED: package check VERIFIED in vae.py verify --json.
 2026-11-25T04:57:07Z s=dcdb118f FINDING examples/linear-clone/Makefile recipes (runtime) learn=none: UNKNOWN: whether recipes should run through mise exec; not requested.
 2026-11-25T04:57:07Z s=dcdb118f FINDING examples/linear-clone/Makefile:2 and .env.example (own claim corrected) learn=none: VERIFIED: probe outputs K1..K9 recorded; documentation corrected.
+2026-11-25T05:05:59Z s=dcdb118f DONE fp=4c24fca2ed89 cov=98.5% paths=examples/linear-clone/src/core/dates.ts,examples/linear-clone/src/core/digest.ts,examples/linear-clone/src/core/ids.ts,examples/linear-clone/src/core/issue.ts(+4)
+2026-11-25T05:05:59Z s=dcdb118f FINDING examples/linear-clone/src/core/issue.ts:validateDraft|validatePatch learn=test: VERIFIED: tests/core.test.ts drafts and patches cover each field's error path.
+2026-11-25T05:05:59Z s=dcdb118f FINDING examples/linear-clone/src/core/issue.ts:applyPatch learn=test: VERIFIED: tests cover done, reopen and no-op patches.
+2026-11-25T05:05:59Z s=dcdb118f FINDING examples/linear-clone/src/core/stats.ts:cycleStats learn=test: VERIFIED: tests match the scaffold's formulas with real values.
+2026-11-25T05:05:59Z s=dcdb118f FINDING examples/linear-clone/src/core/digest.ts:dueDigest learn=test: VERIFIED: tests cover done, unassigned and future issues.
+2026-11-25T05:05:59Z s=dcdb118f FINDING examples/linear-clone/src/core/rollover.ts:planRollover learn=test: VERIFIED: tests cover running, ended, reused and repeated cases.
+2026-11-25T05:05:59Z s=dcdb118f FINDING examples/linear-clone/src/core/dates.ts learn=test: VERIFIED: tests check Berlin and Los Angeles around midnight UTC.

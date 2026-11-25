@@ -1,6 +1,6 @@
 # Plan: the linear-clone example app
 
-Status: in progress. M0 is done.
+Status: in progress. M0 and M1 are done.
 
 Tick a milestone `- [x]` when its proof passes, then run `verify` on its scope.
 
@@ -99,9 +99,10 @@ flowchart LR
   - Repeat the two Bun probes above under the pinned 1.4.5.
   - VERIFIED from `vae_repo.py:235`: the package check requires pkgroll only of a package that is not private and declares `exports`, `main` or `module`. The private app needs none.
   - Proof: `make setup lint test coverage` passes, and the root gate runs the new rule.
-- [ ] **M1 Pure core.**
+- [x] **M1 Pure core.**
   - `src/core/issue.ts`: enums, rank order, `validateDraft` and `validatePatch` with length bounds.
-  - `src/core/ids.ts`, `src/core/stats.ts` (scope, started, done, per assignee, burn-up), `src/core/digest.ts` (due on a date in a time zone), `src/core/rollover.ts`.
+  - `src/core/ids.ts`, `src/core/stats.ts` (scope, started, done, per assignee, burn-up), `src/core/digest.ts` (due on a date in a time zone), `src/core/rollover.ts`, and `src/core/dates.ts` for the calendar dates the last three share.
+  - The burn-up counts an issue in the scope from the day it was created and as done from its `completedAt`, which `applyPatch` sets on the move to `done` and clears on the move back.
   - Proof: `tests/core.test.ts`, with each rule's main error path.
   - Docs: why ranks and statistics live in the core. The server and the browser show the same numbers.
 - [ ] **M2 Backplane workspace.**
