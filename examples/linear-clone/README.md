@@ -1,10 +1,10 @@
 # linear-clone
 
-An issue tracker in the style of Linear, built on defuss-backplane. It keeps every issue, comment, attachment, log line and schedule in the backplane under the app name `linear-clone`, so the app process itself holds no state. One listener on 127.0.0.1 serves the browser frontend, the defuss-rpc API and the same API as MCP tools. It has no user authentication yet: every request acts as the configured viewer.
+An issue tracker in the style of Linear, built on [defuss-backplane](https://github.com/kyr0/defuss-backplane). It keeps every issue, comment, attachment, log line and schedule in the backplane under the app name `linear-clone`, so the app process itself holds no state. One listener on 127.0.0.1 serves the browser frontend, the [defuss-rpc](https://github.com/kyr0/defuss-rpc) API and the same API as MCP tools. It has no user authentication yet: every request acts as the configured viewer.
 
 ## Run it
 
-The app needs a running defuss-backplane daemon and its bot key. Start the daemon from the repository root with `make setup` and `make start`.
+The app needs a running [defuss-backplane](https://github.com/kyr0/defuss-backplane) daemon and its bot key. Start the daemon from the repository root with `make setup` and `make start`.
 
 ```sh
 make setup                 # tools, the packed backplane, dependencies, the three test browsers and a missing .env
@@ -18,7 +18,7 @@ Each verb prints JSON, one object per line; `FORMAT=text` prints readable lines.
 
 Open `http://127.0.0.1:43180/`. On its first start in an empty workspace, the app seeds `input/seed.json`, the scaffold's team, 15 issues, comments, activity and inbox, with dates moved to today.
 
-VERIFIED: the service exits with code 1 and one log line when its configuration is invalid or the backplane's `/readyz` does not answer, and with 0 on SIGTERM (tests/cli.test.ts). `make start` then reports `"state":"dead"` with the last stderr lines.
+VERIFIED: the service exits with code 1 and one log line when its configuration is invalid or the backplane's `/readyz` does not answer, and with 0 on `SIGTERM` (tests/cli.test.ts). `make start` then reports `"state":"dead"` with the last stderr lines.
 
 `make setup` creates a missing `.env` from `.env.example` with the daemon's `API_KEY` from the repository root's `.env`, and creates that one first if it is missing. It never rewrites an existing `.env`. A root key with a character besides letters, digits and `._~+/=-` stops setup with a message, because Bun's `.env` parser changes some of them, such as `$`, `#`, quotes and spaces. You then write `BACKPLANE_API_KEY` yourself. Without `.env`, `make start` reports `"state":"unconfigured"` with `"fix":"make setup"`.
 
@@ -29,7 +29,7 @@ Bun reads `.env` for the app and for `make metrics`. The app checks every value 
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `PORT` | 43180 | The app's listener on 127.0.0.1. |
-| `BACKPLANE_PORT` | 43127 | The defuss-backplane daemon on 127.0.0.1. |
+| `BACKPLANE_PORT` | 43127 | The [defuss-backplane](https://github.com/kyr0/defuss-backplane) daemon on 127.0.0.1. |
 | `BACKPLANE_API_KEY` | required | The daemon's `API_KEY`. In `.env`, write a key with `$` or `#` in double quotes and each `$` as `\$`. |
 | `WORKSPACE` | `vector` | The backplane tenant that holds the workspace. |
 | `VIEWER` | `aron` | The person whom "My issues", comments and activity refer to. |
@@ -49,7 +49,7 @@ The browser and agents call the same namespaces. Over RPC they live at `/rpc`, t
 | `Cycles` | `current`, `stats(id)`. |
 | `Jobs` | `dueDigest`, `cycleRollover`: the backplane's scheduler calls them with the bot key. MCP does not list them, and a call without the key answers 403. |
 
-Attachments go through defuss-rpc's streaming transfers: `upload("attachment", file, { uploadId: "<issue>.<uuid>" })` stores up to 25 MiB per file, and `downloadAsBlob("attachment", …, { downloadId: "<issue>/<name>" })` reads it back.
+Attachments go through [defuss-rpc](https://github.com/kyr0/defuss-rpc)'s streaming transfers: `upload("attachment", file, { uploadId: "<issue>.<uuid>" })` stores up to 25 MiB per file, and `downloadAsBlob("attachment", …, { downloadId: "<issue>/<name>" })` reads it back.
 
 A failed call answers with a code in its message, such as `REVISION_CONFLICT(issue): …`, and the matching HTTP status: 400 for invalid input, 404, 409 for a revision conflict, 413 for a file that is too large, 503 when the backplane is busy.
 
@@ -73,12 +73,13 @@ A failed call answers with a code in its message, such as `REVISION_CONFLICT(iss
 | `make e2e-live` | Runs the deep suite against the backplane that `.env` names, on a second instance of the built app, and writes `output/deep-live.json`. The app `make start` runs and its workspace stay untouched. |
 | `make mcp-config` | Writes the app's MCP entry, `{"type":"http","url":"http://127.0.0.1:<PORT>/mcp"}` under `linear-clone`, into `.mcp.json` here and at the repository root, where the backplane's entry is. Other entries stay. |
 | `make bench` | Times `Issues.list` over 1,000 issues and writes `output/bench.json`. |
+| `make health`, `make healthz` | Ask the running app's `/readyz` and `/livez` and print the answer as JSON. Readiness also needs the backplane. Each exits 1 unless the probe passes. |
 | `make metrics` | Prints the running backplane's metric lines for `app="linear-clone"`. |
 | `make verify` | lint, test, coverage and e2e. |
 
 ### Deep suite
 
-`scripts/deep.ts` runs every documented behavior once through defuss-rpc and once through MCP. It works in the workspace `_e2e_test_linear-clone`, on an app instance of its own whose two jobs run every second, and it wipes that workspace before and after the run. The wipe refuses any workspace whose name does not start with `_e2e_test_`. The terminated schedules, their run history and the log lines stay, because the backplane deletes none of them.
+`scripts/deep.ts` runs every documented behavior once through [defuss-rpc](https://github.com/kyr0/defuss-rpc) and once through MCP. It works in the workspace `_e2e_test_linear-clone`, on an app instance of its own whose two jobs run every second, and it wipes that workspace before and after the run. The wipe refuses any workspace whose name does not start with `_e2e_test_`. The terminated schedules, their run history and the log lines stay, because the backplane deletes none of them.
 
 | Part | What it checks |
 | --- | --- |

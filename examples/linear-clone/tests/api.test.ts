@@ -148,4 +148,26 @@ describe("MCP and HTTP", () => {
     expect(await (await fetch(server.url + "/")).text()).toContain("<title>Vector</title>");
     expect((await fetch(server.url + "/", { headers: { Host: "evil.example" } })).status).toBe(403);
   });
+
+  test("liveness answers while the app serves; readiness also needs the backplane and fails without it", async () => {
+    for (const path of ["/livez", "/healthz"])
+      expect(await (await fetch(server.url + path)).json()).toEqual({ service: "linear-clone", status: "pass" });
+    for (const path of ["/readyz", "/health"]) {
+      const ready = await fetch(server.url + path);
+      expect([ready.status, await ready.json()]).toEqual([200, { service: "linear-clone", status: "pass", checks: [{ name: "backplane", status: "pass" }] }]);
+    }
+    const own = await startDaemon();
+    const alone = await startServer(
+      loadConfig({ PORT: String(await freePort()), BACKPLANE_PORT: String(own.port), BACKPLANE_API_KEY: own.apiKey }),
+      { publicDir, seed },
+    );
+    try {
+      await own.stop();
+      const down = await fetch(alone.url + "/readyz");
+      expect([down.status, await down.json()]).toEqual([503, { service: "linear-clone", status: "fail", checks: [{ name: "backplane", status: "fail" }] }]);
+      expect((await fetch(alone.url + "/livez")).status).toBe(200);
+    } finally {
+      await alone.close().catch(() => {});
+    }
+  });
 });

@@ -59,7 +59,7 @@ RULES += [
     {"id": "backplane.network", "kind": "contains", "path": "ARCH.md",
      "text": "127.0.0.1", "claim": "architecture specifies the loopback listener"},
     {"id": "backplane.install", "kind": "contains", "path": "README.md",
-     "text": "defuss-backplane-0.3.0.tgz", "claim": "quick start installs the tested package"},
+     "text": "npm install defuss-backplane\n", "claim": "quick start installs the published package from npm (human decision 2026-11-26)"},
     {"id": "backplane.typescript", "kind": "command",
      "command": "test -z \"$(find src tests scripts -type f \\( -name '*.js' -o -name '*.mjs' -o -name '*.cjs' -o -name '*.jsx' \\) -print)\"",
      "claim": "sources, tests and scripts stay TypeScript; the lint step type-checks all three"},

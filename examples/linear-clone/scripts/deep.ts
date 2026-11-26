@@ -382,6 +382,11 @@ export async function deepCheck(o: { baseUrl: string; mcpConfig: string; backpla
       assert.equal(found.length, 1, job + " has one live schedule");
       return found[0]!;
     };
+    await step("liveness and readiness answer, readiness with the backplane's check", async () => {
+      for (const path of ["/livez", "/healthz"]) assert.deepEqual(await (await fetch(o.baseUrl + path)).json(), { service: "linear-clone", status: "pass" });
+      for (const path of ["/readyz", "/health"])
+        assert.deepEqual(await (await fetch(o.baseUrl + path)).json(), { service: "linear-clone", status: "pass", checks: [{ name: "backplane", status: "pass" }] });
+    });
     await step("MCP lists no Jobs tool, and a Jobs call without the bot key answers 403", async () => {
       assert.ok(!(await agent.listTools()).tools.some((t) => t.name.startsWith("Jobs.")));
       await rejects(rpc("Jobs.dueDigest"), 403);

@@ -100,3 +100,40 @@ test("log lines merge by time across streams, and an untimed line stays with the
   expect(merged[1]).toMatchObject({ level: "ERROR", fields: { k: "v" } });
   expect(merged[2]).toMatchObject({ ts: "2026-11-26T06:00:01.000Z", level: null });
 });
+
+test("probe and metrics read the running service's routes, with the key from .env, and refuse a stopped service", async () => {
+  const dir = await project();
+  await writeFile(join(dir, ".env"), "API_KEY=k1\n");
+  await writeFile(
+    join(dir, "http.mjs"),
+    `import { createServer } from "node:http";
+     const json = (res, status, body) => res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(body));
+     const server = createServer((req, res) => {
+       if (req.url === "/readyz") return json(res, 200, { status: "pass" });
+       if (req.url === "/down") return json(res, 503, { status: "fail" });
+       if (req.url === "/metrics")
+         return req.headers.authorization === "Bearer k1" ? res.end('# HELP a\\na_total{app="shop"} 1\\nb_total{app="other"} 2\\n') : res.writeHead(401).end();
+       res.writeHead(404).end();
+     });
+     server.listen(0, "127.0.0.1", () => console.log(new Date().toISOString() + " INFO listening url=http://127.0.0.1:" + server.address().port));
+     process.on("SIGTERM", () => process.exit(0));`,
+  );
+  const raw = (name: string, flags: Record<string, string>) => {
+    const args = Object.entries({ name: "probe", ...flags }).flatMap(([k, v]) => ["--" + k, v]);
+    const r = spawnSync("node", [script, ...args, name], { cwd: dir, encoding: "utf8" });
+    return { code: r.status, out: r.stdout.trim() };
+  };
+  try {
+    expect(verb(dir, "probe")).toMatchObject({ code: 1, out: [{ state: "stopped", fix: "make start" }] });
+    expect(verb(dir, "start", { run: "exec node http.mjs" }).code).toBe(0);
+    expect(verb(dir, "probe")).toMatchObject({ code: 0, out: [{ state: "running", status: 200, ok: true, body: { status: "pass" } }] });
+    expect(verb(dir, "probe", { path: "/down" })).toMatchObject({ code: 1, out: [{ status: 503, ok: false, body: { status: "fail" } }] });
+    expect(raw("metrics", { "key-env": "API_KEY", app: "shop" })).toEqual({ code: 0, out: 'a_total{app="shop"} 1' });
+    expect(raw("metrics", { "key-env": "API_KEY" }).out.split("\n")).toHaveLength(3);
+    expect(verb(dir, "metrics")).toMatchObject({ code: 1, out: [{ ok: false, status: 401 }] });
+    expect(verb(dir, "metrics", { "key-env": "NONE" })).toMatchObject({ code: 1, out: [{ ok: false, fix: "make env" }] });
+  } finally {
+    verb(dir, "stop");
+    await rm(dir, { recursive: true, force: true });
+  }
+});

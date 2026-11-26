@@ -1,5 +1,6 @@
-/** The Makefile lifecycle verbs of a detached service: `node scripts/service.ts start|stop|status|log`. VERIFIED:
- * tests/service.test.ts runs every verb, a dead start, a missing .env and a failed build against real processes.
+/** The Makefile lifecycle verbs of a detached service: `node scripts/service.ts start|stop|status|log|probe|metrics`.
+ * VERIFIED: tests/service.test.ts runs every verb, a dead start, a missing .env and a failed build against real
+ * processes.
  *
  * Every verb prints JSON by default (`--format text` prints one readable line per object), so scripts and agents read
  * the state, pid, URL and recent errors without parsing prose. Why one Node script instead of shell in the Makefile:
@@ -8,12 +9,14 @@
  *
  * Flags: --name (service name), --run (shell command; `exec` keeps the pid), --build (optional command run quietly
  * before start), --lines (log entries, default 50), --format (json | text), --ready-ms (start's wait for `listening`,
- * default 10000). Paths, relative to the working directory: tmp/<name>.pid, var/log/<name>.stdout|.stderr (appended),
+ * default 10000), --path (probe's route, default /readyz), --key-env (the .env key whose value metrics sends as the bearer
+ * token), --app (metrics keeps only lines with that app label). probe and metrics find the URL in the running
+ * service's `listening` line, so they reach the port this start used. Paths, relative to the working directory: tmp/<name>.pid, var/log/<name>.stdout|.stderr (appended),
  * var/log/<name>.build (last build). */
 import { spawn, spawnSync } from "node:child_process";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { setTimeout as pause } from "node:timers/promises";
-import { parseArgs } from "node:util";
+import { parseArgs, parseEnv } from "node:util";
 
 type Report = Record<string, unknown> & { service: string; state: string };
 export type Entry = { ts: string | null; stream: "stdout" | "stderr"; level: string | null; msg: string; fields: Record<string, string> };
@@ -28,6 +31,9 @@ const { values: flags, positionals } = import.meta.main
         lines: { type: "string", default: "50" },
         format: { type: "string", default: "json" },
         "ready-ms": { type: "string", default: "10000" },
+        path: { type: "string", default: "/readyz" },
+        "key-env": { type: "string" },
+        app: { type: "string" },
       },
     })
   : { values: { name: "service", lines: "50", format: "json", "ready-ms": "10000" } as Record<string, string | undefined>, positionals: [] };
@@ -208,6 +214,57 @@ function log(): number {
   return 0;
 }
 
+/** The running service's URL, or the report that says why there is none. */
+function running(): { url: string } | { report: Report } {
+  const now = status().report;
+  if (now.state !== "running") return { report: { ...now, fix: now.fix ?? "make start" } };
+  return typeof now.url === "string" ? { url: now.url } : { report: { ...now, error: "no listening line in the log", fix: "make log" } };
+}
+
+/** GETs one route of the running service and prints its status and body; exits 1 unless the answer is 2xx. */
+async function probe() {
+  const at = running();
+  if ("report" in at) return (print(at.report), 1);
+  const target = at.url + (flags.path ?? "/readyz");
+  try {
+    const response = await fetch(target, { signal: AbortSignal.timeout(5000) });
+    const body = await response.text();
+    let parsed: unknown = body.trim();
+    try {
+      parsed = JSON.parse(body);
+    } catch {
+      // A plain-text answer stays text.
+    }
+    print({ service: name, state: "running", url: target, status: response.status, ok: response.ok, body: parsed });
+    return response.ok ? 0 : 1;
+  } catch (error) {
+    print({ service: name, state: "running", url: target, ok: false, error: String((error as Error).message ?? error) });
+    return 1;
+  }
+}
+
+/** Prints the running service's Prometheus scrape, the format scrapers and `grep` read, so not JSON. With --key-env
+ * the bearer token comes from .env; with --app only that app's lines remain. A failure prints JSON and exits 1. */
+async function metrics() {
+  const at = running();
+  if ("report" in at) return (print(at.report), 1);
+  const keyName = flags["key-env"];
+  const key = keyName && existsSync(".env") ? parseEnv(readFileSync(".env", "utf8"))[keyName] : undefined;
+  if (keyName && !key) return (print({ service: name, state: "running", ok: false, error: keyName + " is not set in .env", fix: "make env" }), 1);
+  const target = at.url + "/metrics";
+  const response = await fetch(target, { headers: key ? { Authorization: "Bearer " + key } : {}, signal: AbortSignal.timeout(5000) }).catch(
+    (error: Error) => error,
+  );
+  if (response instanceof Error || !response.ok) {
+    const reason = response instanceof Error ? { error: response.message } : { status: response.status };
+    return (print({ service: name, state: "running", url: target, ok: false, ...reason }), 1);
+  }
+  const label = flags.app ? `app="${flags.app}"` : null;
+  const kept = (await response.text()).split("\n").filter((line) => line && (!label || line.includes(label)));
+  console.log(kept.join("\n"));
+  return 0;
+}
+
 const verbs: Record<string, () => number | Promise<number>> = {
   start,
   stop,
@@ -217,11 +274,13 @@ const verbs: Record<string, () => number | Promise<number>> = {
     return now.code;
   },
   log,
+  probe,
+  metrics,
 };
 if (import.meta.main) {
   const verb = verbs[positionals[0] ?? ""];
   if (!verb) {
-    console.error("usage: node scripts/service.ts start|stop|status|log --name <service> [--run <cmd>] [--build <cmd>]");
+    console.error("usage: node scripts/service.ts start|stop|status|log|probe|metrics --name <service> [--run <cmd>] [--build <cmd>] [--path <route>] [--key-env <key>] [--app <app>]");
     process.exit(2);
   }
   process.exitCode = await verb();

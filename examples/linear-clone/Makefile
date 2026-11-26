@@ -12,7 +12,7 @@ ROOT        = ../..
 BACKPLANE   = deps/defuss-backplane
 BACKPLANE_TGZ = $(ROOT)/output/defuss-backplane-$(shell node -p "require('$(ROOT)/package.json').version").tgz
 
-.PHONY: help setup build start stop restart status log metrics bench test coverage lint e2e verify logs mcp-config e2e-live
+.PHONY: help setup build start stop restart status log metrics bench test coverage lint e2e verify logs mcp-config e2e-live health healthz
 .DEFAULT_GOAL := help
 
 help: ## list the verbs with their usage (default goal)
@@ -67,6 +67,12 @@ MCP_OUT ?= .mcp.json $(ROOT)/.mcp.json
 mcp-config: ## write the app's MCP client entry into .mcp.json here and at the repository root, other servers kept
 	@node $(ROOT)/scripts/mcp-config.ts --name $(NAME) --env $(MCP_ENV) --url 'http://127.0.0.1:$${PORT:-43180}/mcp' \
 	  $(foreach f,$(MCP_OUT),--out $(f))
+
+health: ## readiness of the running app (/readyz: it answers and the backplane is ready) as JSON; exits 1 unless it passes
+	@$(SERVICE) --path /readyz probe
+
+healthz: ## liveness of the running app (/livez) as JSON; exits 1 unless it answers
+	@$(SERVICE) --path /livez probe
 
 metrics: ## print the running backplane's metric lines for app="linear-clone" (reads .env like the app)
 	bun scripts/metrics.ts

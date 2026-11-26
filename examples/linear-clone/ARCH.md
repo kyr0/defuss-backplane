@@ -1,6 +1,6 @@
 # linear-clone architecture
 
-linear-clone shows how an app service uses every defuss-backplane service without a database of its own. This page explains the parts, why each beats the obvious alternative, and how to operate the service.
+linear-clone shows how an app service uses every [defuss-backplane](https://github.com/kyr0/defuss-backplane) service without a database of its own. This page explains the parts, why each beats the obvious alternative, and how to operate the service.
 
 ## Overview
 
@@ -40,9 +40,9 @@ The app runs no timer. At startup it creates or updates two schedules in the bac
 
 ## Why the frontend morphs
 
-The frontend starts from the defuss-shadcn issue tracker scaffold: its markup, styles and component bundle. The scaffold's rows, cards, issue page, notes and table rows became JSX components compiled for defuss-morph. Each rendered region is a `reactive()` binding to one store, keyed by issue ID. After an action, every region renders again, and defuss-morph changes only the nodes that differ.
+The frontend starts from the [defuss-shadcn](https://github.com/kyr0/defuss-shadcn) issue tracker scaffold: its markup, styles and component bundle. The scaffold's rows, cards, issue page, notes and table rows became JSX components compiled for [defuss-morph](https://github.com/kyr0/defuss-morph). Each rendered region is a `reactive()` binding to one store, keyed by issue ID. After an action, every region renders again, and [defuss-morph](https://github.com/kyr0/defuss-morph) changes only the nodes that differ.
 
-Rebuilding the regions with `innerHTML` would be the simpler alternative. It would drop focus, typed text and listeners on every change. VERIFIED: a comment typed on an issue page survives a priority change of that issue, which re-renders the page (scripts/e2e.ts). Within one region, keyed rows keep their nodes; a row whose status changes leaves its group's region and is created in the other. The shell outside the regions changes only through defuss-query. The gate rule `linear-clone.morph-rendering` rejects hand-written DOM writes in `src/web`.
+Rebuilding the regions with `innerHTML` would be the simpler alternative. It would drop focus, typed text and listeners on every change. VERIFIED: a comment typed on an issue page survives a priority change of that issue, which re-renders the page (scripts/e2e.ts). Within one region, keyed rows keep their nodes; a row whose status changes leaves its group's region and is created in the other. The shell outside the regions changes only through [defuss-query](https://github.com/kyr0/defuss-query). The gate rule `linear-clone.morph-rendering` rejects hand-written DOM writes in `src/web`.
 
 Writes from one tab run one after another. VERIFIED: before that, three quick select changes on one issue page made the second fail with `REVISION_CONFLICT` against the first.
 
@@ -50,11 +50,11 @@ Lucide icons are imported one by one and rendered as SVG by the same components.
 
 ## Security
 
-- Both listeners stay on 127.0.0.1, and defuss-serve rejects a foreign `Host` header on every route.
+- Both listeners stay on 127.0.0.1, and [defuss-serve](https://github.com/kyr0/defuss-serve) rejects a foreign `Host` header on every route.
 - There is no user authentication yet. Anyone who can reach the port acts as `VIEWER`. Put an authenticating proxy in front before you expose it.
 - The bot key never reaches the browser. `Jobs` checks it in constant time and answers 403 without it, and MCP does not list `Jobs`.
 - Uploads are checked before the first byte arrives: the issue must exist, the file name must be valid and the announced size must be at most 25 MiB, else the server answers 403.
-- VERIFIED: MCP answers 403 to every request with an `Origin` header (defuss-mcp's check with `allowedOrigins: []`), so a web page cannot drive the tools through a visitor's browser.
+- VERIFIED: MCP answers 403 to every request with an `Origin` header ([defuss-mcp](https://github.com/kyr0/defuss-mcp)'s check with `allowedOrigins: []`), so a web page cannot drive the tools through a visitor's browser.
 
 ## Privacy
 
@@ -65,15 +65,15 @@ The workspace holds names of people, issue texts, comments and attachments, all 
 | Task | Command |
 | --- | --- |
 | Start detached, built from source | `make start` writes `tmp/linear-clone.pid`, appends to `var/log/linear-clone.stdout` and `.stderr`, and prints the state as JSON once the app logs `listening` or exits. |
-| Check | `make status` prints the state, pid and URL as JSON and exits 1 only for a stale pid. |
+| Check | `make status` prints the state, pid and URL as JSON and exits 1 only for a stale pid. `make health` asks `/readyz`, which passes only while the backplane is ready, and `make healthz` asks `/livez`. |
 | Read the log | `make log` merges stdout and stderr by time, one JSON object per line; or the backplane's app log of `linear-clone`. |
 | Metrics | `make metrics` prints the backplane's call counts and durations for this app. |
-| Stop | `make stop` sends SIGTERM and kills after 5 seconds. |
+| Stop | `make stop` sends `SIGTERM` and kills after 5 seconds. |
 | Inspect the data as an agent | `make mcp-config` writes the app's MCP entry into `.mcp.json` here and at the repository root. |
 
-VERIFIED: `make start`, `status`, `log`, `metrics` and `stop` work against a running backplane, and the lifecycle verbs' JSON is tested with a real process in the repository's tests/service.test.ts, and a restart on another port updates the schedules' callback URL (tests/jobs.test.ts). Each log line starts with an ISO-8601 UTC timestamp and its level. VERIFIED: defuss-mcp prints one notice on stderr at startup, because the MCP endpoint answers in JSON mode.
+The probes `/livez` and `/healthz` answer while the app serves; `/readyz` and `/health` also ask the backplane's `/readyz` and answer 503 without it. Why a readiness that asks the backplane: no call can succeed without it, so a supervisor should route nothing to the app then. They report pass or fail only, like the backplane's. VERIFIED: tests/api.test.ts sees 503 after its daemon stopped, and the deep suite asks all four. VERIFIED: `make start`, `status`, `log`, `metrics` and `stop` work against a running backplane, and the lifecycle verbs' JSON is tested with a real process in the repository's tests/service.test.ts, and a restart on another port updates the schedules' callback URL (tests/jobs.test.ts). Each log line starts with an ISO-8601 UTC timestamp and its level. VERIFIED: [defuss-mcp](https://github.com/kyr0/defuss-mcp) prints one notice on stderr at startup, because the MCP endpoint answers in JSON mode.
 
-The e2e connects its MCP client from the file `make mcp-config` writes for the built app. It calls all 13 tools and their RPC functions: reads on the same state, writes on twin issues with IDs, titles and times masked, and every call states its expected outcome, a value or an HTTP status. Why stated outcomes: two equal failures would otherwise pass as a match. VERIFIED: that happened while the check was written, and the stated outcomes then exposed a 500 for a non-string cycle ID, now a 400. VERIFIED: with titles left unmasked, the check fails at `Issues.create`. Frontend coverage comes from Chromium's V8 coverage of the built `main.js`, mapped through its source map; the coverage of each document is kept before the journey reloads the page.
+The e2e connects its MCP client from the file `make mcp-config` writes for the built app. It calls every MCP tool and its RPC function: reads on the same state, writes on twin issues with IDs, titles and times masked, and every call states its expected outcome, a value or an HTTP status. Why stated outcomes: two equal failures would otherwise pass as a match. VERIFIED: that happened while the check was written, and the stated outcomes then exposed a 500 for a non-string cycle ID, now a 400. VERIFIED: with titles left unmasked, the check fails at `Issues.create`. Frontend coverage comes from Chromium's V8 coverage of the built `main.js`, mapped through its source map; the coverage of each document is kept before the journey reloads the page.
 
 The deep suite (`scripts/deep.ts`) runs one scenario per transport through a call function, so RPC and MCP pass the same assertions. Why one scenario instead of the twin comparison above: a twin comparison proves only that both transports agree, and two equally wrong answers pass. The deep suite states what each call must do. It runs on an instance of its own in `_e2e_test_linear-clone`, so `make e2e-live` can run beside the app `make start` runs without touching its workspace, and it starts with both jobs every second so the backplane delivers them during the run. VERIFIED: two consecutive runs against one backplane passed all 27 steps, and the second one passed only after the schedule fix above.
 

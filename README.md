@@ -1,20 +1,20 @@
 # defuss-backplane
 
-Local, unified low-level persistence and logic layer RPC service for application service backend and MCP agents. One process serves defuss-rpc, MCP, streaming file routes, health probes and metrics on the same port through defuss-serve. Each bucket belongs to one app, tenant and service.
+Local, unified low-level persistence and logic layer RPC service for application service backend and MCP agents. One process serves [defuss-rpc](https://github.com/kyr0/defuss-rpc), MCP, streaming file routes, health probes and metrics on the same port through [defuss-serve](https://github.com/kyr0/defuss-serve). Each bucket belongs to one app, tenant and service.
 
 ## Quick start
 
-The source ZIP includes the installable tarball in its `release` directory. Copy the tarball into your application's directory. From that directory, install it with one of these commands.
+Install the package in your application's directory.
 
 ```sh
-npm install ./defuss-backplane-0.3.0.tgz
+npm install defuss-backplane
 # or
-bun add ./defuss-backplane-0.3.0.tgz
+bun add defuss-backplane
 ```
 
-The release bundles the defuss-db engine code reached by the daemon. npm or bun installs defuss-vfs, the file engine, defuss-logs 0.3.0, defuss-scheduler 0.2.0 and the other runtime packages as regular dependencies. Installing the tarball avoids the model runtimes in the development dependency tree.
+npm or bun also installs [defuss-vfs](https://github.com/kyr0/defuss-vfs), [defuss-logs](https://github.com/kyr0/defuss-logs), [defuss-scheduler](https://github.com/kyr0/defuss-scheduler) and the other runtime packages. The package bundles the [defuss-db](https://github.com/kyr0/defuss-db) engine code the daemon needs.
 
-In the directory where the daemon will run, create a private bot key once. Skip this command if you already have a configured `.env`.
+Create a private bot key once, in the directory where the daemon will run. The command writes `.env` with a random `API_KEY`, readable only by you, and fails instead of overwriting an existing `.env`. In a checkout of this repository, `make env` does the same from `.env.example`, and `make setup` runs it.
 
 ```sh
 (umask 077; set -C; printf 'API_KEY=%s\n' "$(openssl rand -hex 32)" > .env)
@@ -30,13 +30,75 @@ bun node_modules/defuss-backplane/dist/cli.js
 
 The startup log prints the listener address. The default is `http://127.0.0.1:43127`. Give backend processes and local MCP clients the same bot key. Node.js callers can load their environment file with `node --env-file=.env`.
 
+## Apps, tenants and buckets
+
+Every piece of data lives at one address: app, tenant, bucket. Logs are the exception, with one log per app and one more per tenant.
+
+```ts
+// app: your service
+const shopApp = await connectBackplane({ app: "shop" });
+// tenant: one customer of that service
+const acme = shopApp.tenant("acme");
+// bucket: one named store in that tenant
+const orders = acme.db("orders");
+```
+
+```mermaid
+flowchart LR
+  shop["app: shop"] --> acme["tenant: acme"]
+  shop --> globex["tenant: globex"]
+  acme --> a1["db: orders"]
+  acme --> a2["vfs: media"]
+  globex --> g1["db: orders"]
+```
+
+The two `orders` buckets in the diagram are separate stores: the same bucket name in another tenant or app never shares data. The names separate data but grant nothing, because every caller with the bot key can name any app and tenant. Your service decides with its own authentication which tenant a request may use.
+
+## Services
+
+An app service connects once and then uses any of these services in any tenant. The handles use `shopApp` and `acme` from the example above: `shopApp` is what `connectBackplane` returns, and `acme` is `shopApp.tenant("acme")`.
+
+| Service | Handle | What an app keeps there | Details |
+| --- | --- | --- | --- |
+| Cache | `acme.cache(bucket)` | Values under a key, with an optional time to live: sessions, counters, computed results. | [Backend API](#backend-api) |
+| Documents | `acme.db(bucket)` | Documents with generated or own IDs. Queries filter, sort, page and project, up to 1,000 rows each. | [Backend API](#backend-api) |
+| Files | `acme.vfs(bucket)` | Files under path keys, of any size. Calls carry up to 1 MiB, and `upload` and `download` stream larger files. `/files` serves byte ranges, so a media player can seek. | [Files](#files) |
+| Logs | `shopApp.logs()` for the app, `acme.logs()` for the tenant | One log for the app and one per tenant, filtered by level and time. A [defuss-logs](https://github.com/kyr0/defuss-logs) logger writes into them in batches. | [Logs](#logs) |
+| Scheduler | `acme.scheduler(bucket)` | Cron schedules with time zones, retries and run history. At each run the daemon calls one of your RPC functions, or a worker of yours takes the run. | [Scheduling](#scheduling) |
+
+Cache, documents and files take a revision on writes, so two writers cannot overwrite each other unnoticed ([Conditional writes](#conditional-writes)). Over RPC, cache values, documents and log arguments keep native types such as dates, binary data and bigints. Scheduler payloads and results are JSON.
+
+| Way in | For | Route |
+| --- | --- | --- |
+| Typed client `defuss-backplane/client` | App backends on Node.js or Bun | `/rpc` |
+| MCP tools | Agents. `make mcp-config` writes their client entry. | `/mcp` |
+| Plain HTTP | File streams, probes and metrics | `/vfs/object`, `/files`, `/readyz`, `/metrics` |
+
+Every route needs the bot key, except the probes. The daemon listens on 127.0.0.1 only.
+
+## Security
+
+The backplane relies on two things: the bot key, and that only processes on the same machine can reach it.
+
+| Protection | What it means for you |
+| --- | --- |
+| Bot key `API_KEY` | Every request needs `Authorization: Bearer <API_KEY>`, except the health probes. A missing or wrong key gets 401. The daemon does not start without a key. `make env` creates a random 32-byte key in `.env`, readable only by you. |
+| One key, full access | Every holder of the key reaches every app and tenant, their schedules included. Give it only to your backend processes and local agents, never to a browser or a user. `make mcp-config` writes it into `.mcp.json`, readable only by you and ignored by Git. |
+| Loopback only | The daemon listens on 127.0.0.1, so no other machine can connect. `PORT` changes the port, never the host. |
+| Host check | A request whose `Host` is not 127.0.0.1 or localhost at the daemon's port gets 403. A web page whose domain resolves to 127.0.0.1 still cannot pass. |
+| No browsers | Any request with an `Origin` header gets 403, even with the key, so no web page can call the daemon. A browser reaches files only through your backend, which checks its own users and then proxies `/files`. |
+| Callbacks | The daemon sends the bot key with each RPC callback, so a schedule may call only loopback URLs or the origins in `BACKPLANE_CALLBACK_ORIGINS`. A redirect fails the call. The typed client refuses redirects too. |
+| Your users | The backplane has no users or roles. Your service signs its users in and decides which tenant each request may use. |
+
+The data on disk is not encrypted. [ARCH.md](ARCH.md) covers file modes, retention and personal data under "Security and operations".
+
 ## Backend API
 
 ```ts
 import { connectBackplane } from "defuss-backplane/client";
 
-const shop = await connectBackplane({ app: "shop" });
-const tenant = shop.tenant("acme");
+const shopApp = await connectBackplane({ app: "shop" });
+const tenant = shopApp.tenant("acme");
 const cache = tenant.cache("catalog");
 await cache.set("currency", "EUR", 60_000);
 const cached = await cache.get("currency"); // { hit: true, value: "EUR" }
@@ -84,7 +146,7 @@ Omitting `ifRevision` keeps the v0.1 write behavior. A null token requires logic
 
 ## Logs
 
-Each app has a log, and each of its tenants has one more. `client.logs()` writes and reads the app's log, and `client.tenant(name).logs()` that tenant's. defuss-logs 0.3.0 stores the records, and DSON keeps the types of their arguments.
+Each app has a log, and each of its tenants has one more. `client.logs()` writes and reads the app's log, and `client.tenant(name).logs()` that tenant's. [defuss-logs](https://github.com/kyr0/defuss-logs) stores the records, and DSON keeps the types of their arguments.
 
 ```ts
 import { createBatchSink, createLogger } from "defuss-logs/client";
@@ -98,7 +160,7 @@ await logger.flush();
 const { records, nextAfter } = await acme.read({ levels: ["warn", "error"], limit: 50 });
 ```
 
-The handle is a defuss-logs batch writer. A logger in the application formats, redacts and batches its records, and each batch becomes one RPC call of at most 256 KiB of encoded records, which keeps it below the 1 MiB request limit. Install defuss-logs in the application to import `createLogger`.
+The handle is a [defuss-logs](https://github.com/kyr0/defuss-logs) batch writer. A logger in the application formats, redacts and batches its records, and each batch becomes one RPC call of at most 256 KiB of encoded records, which keeps it below the 1 MiB request limit. Install [defuss-logs](https://github.com/kyr0/defuss-logs) in the application to import `createLogger`.
 
 | Operation | Result |
 | --- | --- |
@@ -109,11 +171,11 @@ Records of the same millisecond come back in the order of their IDs, not of thei
 
 ### Reserved app names
 
-App names starting with `_` belong to the defuss libraries, so any call that uses one fails with `INVALID_ARGUMENT`, with one exception for reading. The daemon writes its own lines to the app log of `_backplane`: startup, shutdown, listener diagnostics, scheduler faults, failed OTLP exports, and calls or transfers that fail with a server error other than `BUSY`. It also prints each line to stdout, or stderr for warnings and errors. Any caller with the bot key can read that log with `logs.read` and the scope `{app: "_backplane"}`, for example `connectBackplane({ app: "_backplane" })` followed by `.logs().read()`, so agents and people can debug the daemon. Writing it fails with `INVALID_ARGUMENT`, and it has no tenant logs. After the daemon stops, defuss-logs also reads it from `_backplane/logs` under the data root. A daemon that fails to start prints the error to stderr only. defuss-rpc and defuss-mcp print their own lines to the console, which reach stdout and stderr but not the log.
+App names starting with `_` belong to the defuss libraries, so any call that uses one fails with `INVALID_ARGUMENT`, with one exception for reading. The daemon writes its own lines to the app log of `_backplane`: startup, shutdown, listener diagnostics, scheduler faults, failed OTLP exports, and calls or transfers that fail with a server error other than `BUSY`. It also prints each line to stdout, or stderr for warnings and errors. Any caller with the bot key can read that log with `logs.read` and the scope `{app: "_backplane"}`, for example `connectBackplane({ app: "_backplane" })` followed by `.logs().read()`, so agents and people can debug the daemon. Writing it fails with `INVALID_ARGUMENT`, and it has no tenant logs. After the daemon stops, [defuss-logs](https://github.com/kyr0/defuss-logs) also reads it from `_backplane/logs` under the data root. A daemon that fails to start prints the error to stderr only. [defuss-rpc](https://github.com/kyr0/defuss-rpc) and [defuss-mcp](https://github.com/kyr0/defuss-mcp) print their own lines to the console, which reach stdout and stderr but not the log.
 
 ## Scheduling
 
-Every daemon runs one defuss-scheduler 0.2.0 authority for all apps, tenants and buckets. `tenant.scheduler(bucket)` returns a defuss-scheduler queue. An app either lets the daemon call one of its RPC functions at each occurrence, as described under RPC callbacks, or runs `startWorker` against the queue.
+Every daemon runs one [defuss-scheduler](https://github.com/kyr0/defuss-scheduler) authority for all apps, tenants and buckets. `tenant.scheduler(bucket)` returns a [defuss-scheduler](https://github.com/kyr0/defuss-scheduler) queue. An app either lets the daemon call one of its RPC functions at each occurrence, as described under RPC callbacks, or runs `startWorker` against the queue.
 
 ```ts
 import { startWorker } from "defuss-scheduler/worker";
@@ -138,11 +200,11 @@ process.once("SIGTERM", () => void worker.stop());
 | `terminate` | RPC and MCP | Stop one run, one schedule, every schedule with a ref or the whole bucket at once, and record the cause on each. |
 | `claim`, `renew`, `complete`, `fail` | RPC only | Lease runs and report on them. `startWorker` calls these. |
 
-Edits take `change: { revision, requestId }`. A stale revision fails with `REVISION_CONFLICT`, an ID already in use with `ALREADY_EXISTS`, and an edit of an unknown schedule with `NOT_FOUND`. After an ambiguous response, repeat the call with the same request ID and arguments. Payloads and results are JSON. The defuss-scheduler documentation covers cron syntax, time zones, retries and worker shutdown. Install defuss-scheduler 0.2.0 in the worker's application to import `startWorker`. Handler names starting with `_` belong to the daemon: a schedule cannot use one other than `_rpc`, and a worker cannot claim them.
+Edits take `change: { revision, requestId }`. A stale revision fails with `REVISION_CONFLICT`, an ID already in use with `ALREADY_EXISTS`, and an edit of an unknown schedule with `NOT_FOUND`. After an ambiguous response, repeat the call with the same request ID and arguments. Payloads and results are JSON. The [defuss-scheduler](https://github.com/kyr0/defuss-scheduler) documentation covers cron syntax, time zones, retries and worker shutdown. Install [defuss-scheduler](https://github.com/kyr0/defuss-scheduler) in the worker's application to import `startWorker`. Handler names starting with `_` belong to the daemon: a schedule cannot use one other than `_rpc`, and a worker cannot claim them.
 
 ### RPC callbacks
 
-A schedule with handler `_rpc` needs no worker and no cron of the app's own. At each occurrence the daemon calls the defuss-rpc function that the payload names, with the payload's arguments.
+A schedule with handler `_rpc` needs no worker and no cron of the app's own. At each occurrence the daemon calls the [defuss-rpc](https://github.com/kyr0/defuss-rpc) function that the payload names, with the payload's arguments.
 
 ```ts
 await tenant.scheduler("jobs").create({
@@ -154,9 +216,9 @@ await tenant.scheduler("jobs").create({
 });
 ```
 
-The daemon sends a defuss-rpc request: `POST` to `url` with the DSON body `{className, methodName, args}`. Its headers are `Authorization: Bearer <API_KEY>`, `X-Backplane-Schedule`, `X-Backplane-Run` and `X-Backplane-Attempt`. The app compares the bearer token with its own bot key. Delivery is at least once, so the app should drop a run ID it has already handled. The run stores `{status, result}`, where `result` is the function's return value when it is JSON and null otherwise.
+The daemon sends a [defuss-rpc](https://github.com/kyr0/defuss-rpc) request: `POST` to `url` with the DSON body `{className, methodName, args}`. Its headers are `Authorization: Bearer <API_KEY>`, `X-Backplane-Schedule`, `X-Backplane-Run` and `X-Backplane-Attempt`. The app compares the bearer token with its own bot key. Delivery is at least once, so the app should drop a run ID it has already handled. The run stores `{status, result}`, where `result` is the function's return value when it is JSON and null otherwise.
 
-`url` must use http or https on `127.0.0.1`, `localhost` or `[::1]`, or an origin listed in `BACKPLANE_CALLBACK_ORIGINS`, because the daemon sends its bot key along. A payload that breaks these rules fails `create` or `update` with `INVALID_ARGUMENT`. A call fails after 60 seconds or on a redirect. An answer with status 2xx completes the run. A 4xx answer other than 408 and 429 fails it for good. Other failures retry within the schedule's retry policy. Each failed call logs a WARN line to the `_backplane` log. The daemon checks for due callbacks every 250 ms.
+`url` must use http or https on `127.0.0.1`, `localhost` or `[::1]`, or an origin listed in `BACKPLANE_CALLBACK_ORIGINS`, because the daemon sends its bot key along. A payload that breaks these rules fails `create` or `update` with `INVALID_ARGUMENT`. A call fails after 60 seconds or on a redirect. An answer with status 2xx completes the run. A 4xx answer other than 408 and 429 fails it for good. Other failures retry within the schedule's retry policy. Each failed call logs a `WARN` line to the `_backplane` log. The daemon checks for due callbacks every 250 ms.
 
 ## Files
 
@@ -220,19 +282,19 @@ RPC error bodies carry `{code,error,status}`. The SDK throws `BackplaneError` wi
 
 | Code | RPC status | Caller action |
 | --- | --- | --- |
-| INVALID_ARGUMENT | 400 | Correct the arguments. |
-| UNAUTHORIZED | 401 | Send the bot key as a bearer token. |
-| FORBIDDEN | 403 | Use the loopback URL and port, and send no Origin header. |
-| NOT_FOUND | 404 | Check the endpoint path. A download of a missing object, through either file route, or an edit of an unknown schedule also returns this code. An unknown path gets a plain-text `Not Found` from the listener instead of a JSON body. |
-| METHOD_NOT_ALLOWED | 405 | Use the method named in the `Allow` header. |
-| ALREADY_EXISTS | 409 | Choose a different ID or edit the existing row or schedule. A log batch that fails this way was already stored. |
-| REVISION_CONFLICT | 409 | Read the current version before deciding whether to retry. |
-| PAYLOAD_TOO_LARGE | 413 | Keep `/rpc` and `/mcp` requests under 1 MiB. Stream larger files through `/vfs/object`. The daemon reads an oversized body to its end before it answers, so the sender receives this code instead of a broken connection. |
-| BUSY | 503 | Retry with backoff. Repeat a scheduler call with the same request ID and arguments. |
-| COMMIT_UNCERTAIN | 500 | Inspect the persisted value before issuing another write. Repeat a scheduler call with its original request ID. |
-| STORAGE_ERROR | 500 | Inspect the store and filesystem. |
-| INTERNAL_ERROR | 500 | Retry once. Report repeated failures with the daemon log. |
-| DSON_REQUIRED | 422 equivalent in an MCP tool result | Repeat the read with DSON encoding. |
+| `INVALID_ARGUMENT` | 400 | Correct the arguments. |
+| `UNAUTHORIZED` | 401 | Send the bot key as a bearer token. |
+| `FORBIDDEN` | 403 | Use the loopback URL and port, and send no Origin header. |
+| `NOT_FOUND` | 404 | Check the endpoint path. A download of a missing object, through either file route, or an edit of an unknown schedule also returns this code. An unknown path gets a plain-text `Not Found` from the listener instead of a JSON body. |
+| `METHOD_NOT_ALLOWED` | 405 | Use the method named in the `Allow` header. |
+| `ALREADY_EXISTS` | 409 | Choose a different ID or edit the existing row or schedule. A log batch that fails this way was already stored. |
+| `REVISION_CONFLICT` | 409 | Read the current version before deciding whether to retry. |
+| `PAYLOAD_TOO_LARGE` | 413 | Keep `/rpc` and `/mcp` requests under 1 MiB. Stream larger files through `/vfs/object`. The daemon reads an oversized body to its end before it answers, so the sender receives this code instead of a broken connection. |
+| `BUSY` | 503 | Retry with backoff. Repeat a scheduler call with the same request ID and arguments. |
+| `COMMIT_UNCERTAIN` | 500 | Inspect the persisted value before issuing another write. Repeat a scheduler call with its original request ID. |
+| `STORAGE_ERROR` | 500 | Inspect the store and filesystem. |
+| `INTERNAL_ERROR` | 500 | Retry once. Report repeated failures with the daemon log. |
+| `DSON_REQUIRED` | 422 equivalent in an MCP tool result | Repeat the read with DSON encoding. |
 
 ## Local curl and MCP
 
@@ -262,12 +324,15 @@ The result is available as `structuredContent.value`. A native value that would 
 
 ## Health and metrics
 
-defuss-o11y 0.3.0 reports the daemon's health and every call it serves. A supervisor on the same host polls the probes without the bot key. The scrape needs the key because it names apps. All of these routes reject a foreign Host or any Origin with 403, like the other routes.
+[defuss-o11y](https://github.com/kyr0/defuss-o11y) reports the daemon's health and every call it serves. A supervisor on the same host polls the probes without the bot key. The scrape needs the key because it names apps. All of these routes reject a foreign Host or any Origin with 403, like the other routes.
 
-```sh
-curl -fsS http://127.0.0.1:43127/readyz
-curl -fsS -H "Authorization: Bearer ${API_KEY}" http://127.0.0.1:43127/metrics
-```
+In a checkout, the verbs below ask the daemon `make start` runs, at the URL its `listening` line names.
+
+| Verb | Asks | Prints |
+| --- | --- | --- |
+| `make health` | `/readyz` | The probe's answer as JSON, with the HTTP status. Exits 1 unless it passes. |
+| `make healthz` | `/livez` | The same for liveness. |
+| `make metrics` | `/metrics`, with `API_KEY` from `.env` | The Prometheus text. `make metrics APP=shop` keeps the lines of one app. |
 
 | Path | Bot key | Answer |
 | --- | --- | --- |
@@ -285,11 +350,11 @@ A probe returns `{"service":"defuss-backplane","status":"pass","checks":[{"name"
 | `backplane_store_handles` | gauge | `module` (cache, db, vfs or logs), `state` (busy or idle) | Open store handles. A module keeps at most 32 and answers `BUSY` beyond that. |
 | `backplane_http_active` | gauge | `kind` (requests, streams or uploads) | Requests in progress, response bodies streaming and request bodies arriving. |
 | `backplane_callback_duration` | histogram, seconds | `app`, `outcome` (`ok`, `failed` or `rejected`) | Each RPC callback. A failed call is retried, a rejected one is not. |
-| `backplane_scheduler_errors_total` | counter | none | Faults of the scheduler's background loop, each also logged as an ERROR line. It exists from startup at 0, so a rate alert has data before the first fault. |
+| `backplane_scheduler_errors_total` | counter | none | Faults of the scheduler's background loop, each also logged as an `ERROR` line. It exists from startup at 0, so a rate alert has data before the first fault. |
 
-defuss-o11y adds process uptime, resident memory, readiness, and success per check and per gauge callback. An unknown HTTP method is counted as `_OTHER`, and a call whose scope is invalid has no `app` label. Tenant, bucket and key names never appear in a label. OTLP keeps the dotted names, such as `backplane.operation.duration`. Prometheus output carries the unit in a `# UNIT` line instead of a name suffix.
+[defuss-o11y](https://github.com/kyr0/defuss-o11y) adds process uptime, resident memory, readiness, and success per check and per gauge callback. An unknown HTTP method is counted as `_OTHER`, and a call whose scope is invalid has no `app` label. Tenant, bucket and key names never appear in a label. OTLP keeps the dotted names, such as `backplane.operation.duration`. Prometheus output carries the unit in a `# UNIT` line instead of a name suffix.
 
-The listener stays on 127.0.0.1, so a Prometheus server on another host cannot scrape it. Run a Collector on the same host to scrape `/metrics`, or start the daemon with `BACKPLANE_OTLP=1` to push OTLP/HTTP JSON every 60 seconds and once at shutdown. The OpenTelemetry SDK reads the target from `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`, default `http://localhost:4318/v1/metrics`. defuss-o11y documents `OTEL_EXPORTER_OTLP_METRICS_HEADERS` for a receiver that needs credentials. An export that takes longer than 1.5 seconds fails and logs a WARN line, so the final export cannot hold up a stop.
+The listener stays on 127.0.0.1, so a Prometheus server on another host cannot scrape it. Run a Collector on the same host to scrape `/metrics`, or start the daemon with `BACKPLANE_OTLP=1` to push OTLP/HTTP JSON every 60 seconds and once at shutdown. The OpenTelemetry SDK reads the target from `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`, default `http://localhost:4318/v1/metrics`. [defuss-o11y](https://github.com/kyr0/defuss-o11y) documents `OTEL_EXPORTER_OTLP_METRICS_HEADERS` for a receiver that needs credentials. An export that takes longer than 1.5 seconds fails and logs a `WARN` line, so the final export cannot hold up a stop.
 
 ## Configuration
 
@@ -302,15 +367,15 @@ The listener stays on 127.0.0.1, so a Prometheus server on another host cannot s
 | `BACKPLANE_OTLP` | `1` pushes metrics over OTLP/HTTP. Default `0`. Any other value stops startup. |
 | `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` | The full OTLP metrics URL when `BACKPLANE_OTLP=1`. |
 
-App, tenant and bucket identifiers accept 1 to 48 valid UTF-8 bytes, and an app name must not start with `_`. Each appears on disk as a lowercase slug in its own script, `-` and 8 hex digits of its hash, such as `acme-gmbh-033aedd8` for `Acme GmbH`. Cache keys and file keys accept 1 to 1,024 valid UTF-8 bytes. Stop the service with SIGTERM or SIGINT. To back up the whole service, stop writers, shut down the daemon, then copy the data root. An application's own authentication determines which tenant it passes to the service.
+App, tenant and bucket identifiers accept 1 to 48 valid UTF-8 bytes, and an app name must not start with `_`. Each appears on disk as a lowercase slug in its own script, `-` and 8 hex digits of its hash, such as `acme-gmbh-033aedd8` for `Acme GmbH`. Cache keys and file keys accept 1 to 1,024 valid UTF-8 bytes. Stop the service with `SIGTERM` or `SIGINT`. To back up the whole service, stop writers, shut down the daemon, then copy the data root. An application's own authentication determines which tenant it passes to the service.
 
 ## Example app
 
-[examples/linear-clone](examples/linear-clone/README.md) is an issue tracker that keeps all its state in the backplane. It uses db, cache, vfs, logs and the scheduler with RPC callbacks, and serves its API over defuss-rpc and MCP.
+[examples/linear-clone](examples/linear-clone/README.md) is an issue tracker that keeps all its state in the backplane. It uses db, cache, vfs, logs and the scheduler with RPC callbacks, and serves its API over [defuss-rpc](https://github.com/kyr0/defuss-rpc) and MCP.
 
 ## Development
 
-Install the versions in `mise.toml`, then run `make setup` and `make verify`. The latter runs lint, type checking, real storage and protocol tests, coverage, and a packed-consumer test across Node.js and Bun. The sources, tests and verification scripts are TypeScript. The strict compiler checks all three, so lint fails when a test or script calls the API with the wrong types. The packed-consumer test needs `curl`, `lsof` and npm on the `PATH`. `make setup` also creates a missing `.env` from `.env.example` with a random `API_KEY`, readable only by you. It never rewrites an existing one. Use `make start` for the Node.js daemon or `make start RUNTIME=bun` for Bun. `make start` builds quietly and prints one JSON object with the state, pid and URL. Without `.env` it reports `"state":"unconfigured"` with `"fix":"make setup"`. A daemon that exits at startup is reported as `"state":"dead"` with its last stderr lines. `make status` prints the same object and exits 1 only for a dead daemon. `make log`, or `make logs`, prints the last N=50 entries of stdout and stderr merged by time, one JSON object per line with `ts`, `stream`, `level`, `msg` and `fields`. `make stop` stops the source-tree daemon. `FORMAT=text` prints readable lines instead of JSON.
+Install the versions in `mise.toml`, then run `make setup` and `make verify`. The latter runs lint, type checking, real storage and protocol tests, coverage, and a packed-consumer test across Node.js and Bun. The sources, tests and verification scripts are TypeScript. The strict compiler checks all three, so lint fails when a test or script calls the API with the wrong types. The packed-consumer test needs `curl`, `lsof` and npm on the `PATH`. `make setup` also creates a missing `.env` from `.env.example` with a random `API_KEY`, readable only by you. It never rewrites an existing one. Use `make start` for the Node.js daemon or `make start RUNTIME=bun` for Bun. `make start` builds quietly and prints one JSON object with the state, pid and URL. Without `.env` it reports `"state":"unconfigured"` with `"fix":"make setup"`. A daemon that exits at startup is reported as `"state":"dead"` with its last stderr lines. `make status` prints the same object and exits 1 only for a dead daemon. `make log`, or `make logs`, prints the last N=50 entries of stdout and stderr merged by time, one JSON object per line with `ts`, `stream`, `level`, `msg` and `fields`. `make health`, `make healthz` and `make metrics` ask the running daemon, as described under Health and metrics, and `make results` prints the last packed-consumer report. `make stop` stops the source-tree daemon. `FORMAT=text` prints readable lines instead of JSON.
 
 ### Deep suite
 
@@ -318,11 +383,11 @@ Install the versions in `mise.toml`, then run `make setup` and `make verify`. Th
 
 | Part | What it checks |
 | --- | --- |
-| cache, db, logs, scheduler, vfs | Each documented behavior and error code, once over RPC and once over MCP. Worker leases run over RPC, the only transport that has them. An `_rpc` schedule calls a local defuss-rpc server, which checks the bot key and the `X-Backplane-*` headers. |
+| cache, db, logs, scheduler, vfs | Each documented behavior and error code, once over RPC and once over MCP. Worker leases run over RPC, the only transport that has them. An `_rpc` schedule calls a local [defuss-rpc](https://github.com/kyr0/defuss-rpc) server, which checks the bot key and the `X-Backplane-*` headers. |
 | http | `/vfs/object` conditions, every row of the `/files` header table, Content-Type and `nosniff`, the typed client's upload and download, probes, metric names, and the codes for a missing key, an Origin, a foreign Host, an unknown path, a wrong method and an oversized body. |
 | video | Chromium plays `input/video.webm` through a proxy of `/files` and seeks, which must read a 206 range from inside the object. `make fixtures` regenerates the clip with ffmpeg. It is VP9 because Playwright's Chromium has no H.264. |
 | big | 512 MiB of random bytes up through `upload` and back through `download`, `/vfs/object` and `/files`, each checked by SHA-256, after `backplane_storage_free` shows room for three copies. The daemon's resident memory must grow by less than a quarter of the object during each transfer. |
 
-`make e2e` runs the suite once against its Node.js daemon and writes `output/deep.json`, with the transfer times and memory growth. `make e2e-live` runs it against the daemon `make start` runs, through the `.mcp.json` that `make mcp-config` wrote, and writes `output/deep-live.json`. `make setup` installs the Chromium build that playwright-core 1.65.1 expects.
+`make e2e` runs the suite once against its Node.js daemon and writes `output/deep.json`, with the transfer times and memory growth. `make e2e-live` runs it against the daemon `make start` runs, through the `.mcp.json` that `make mcp-config` wrote, and writes `output/deep-live.json`. `make setup` installs the Chromium build that playwright-core expects.
 
-In a Git working tree, `make gate` runs the vendored defuss-vae verifier. Its review and documentation prompts apply to the current source fingerprint. Storage and transport decisions are in [ARCH.md](ARCH.md).
+In a Git working tree, `make gate` runs the vendored [defuss-vae](https://github.com/kyr0/defuss-vae) verifier. Its review and documentation prompts apply to the current source fingerprint. Storage and transport decisions are in [ARCH.md](ARCH.md).

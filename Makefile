@@ -7,7 +7,7 @@ FORMAT ?= json
 export RUN
 # The CLI loads .env itself under both runtimes, preserving literal key characters.
 
-.PHONY: help setup start stop restart status log metrics bench test coverage lint e2e verify logs mcp-config fixtures e2e-live
+.PHONY: help setup start stop restart status log metrics bench test coverage lint e2e verify logs mcp-config fixtures e2e-live env health healthz results
 .DEFAULT_GOAL := help
 
 help: ## list the verbs with their usage (default goal)
@@ -17,7 +17,7 @@ setup: ## install locked development dependencies (mise supplies pinned runtimes
 	@if command -v mise >/dev/null 2>&1; then mise install; fi
 	bun install --frozen-lockfile
 	./node_modules/.bin/playwright-core install chromium
-	@$(MAKE) -s .env
+	@$(MAKE) -s env
 
 build: ## build the ESM package, types and executable
 	bun run build
@@ -29,6 +29,9 @@ start: ## build quietly, then run RUN detached (pid in tmp/, logs appended to va
 
 # setup creates a missing .env from .env.example with a random bot key, readable by the owner only. Why random, not a
 # fixed default key: every holder may access every tenant. An existing .env is never rewritten.
+env: ## create a missing .env with a random API_KEY, readable by you only; an existing .env stays
+	@if [ -f .env ]; then echo ".env exists; left unchanged"; else $(MAKE) -s .env; fi
+
 .env:
 	@(umask 077; set -C; sed "s/^API_KEY=$$/API_KEY=$$(openssl rand -hex 32)/" .env.example > $@) && echo "created .env with a new API_KEY"
 
@@ -59,7 +62,16 @@ fixtures: ## regenerate input/video.webm (20 s, 640x360, VP9, about 4 MB) with f
 	ffmpeg -hide_banner -loglevel error -y -f lavfi -i "testsrc2=duration=20:size=640x360:rate=25,noise=alls=30:allf=t+u" \
 	  -c:v libvpx-vp9 -b:v 1500k -minrate 1500k -maxrate 1500k -g 25 -deadline realtime -cpu-used 8 -an input/video.webm
 
-metrics: ## show the last package verification results
+health: ## readiness of the running daemon (/readyz) as JSON; exits 1 unless it passes
+	@$(SERVICE) --path /readyz probe
+
+healthz: ## liveness of the running daemon (/livez) as JSON; exits 1 unless it answers
+	@$(SERVICE) --path /livez probe
+
+metrics: ## the running daemon's Prometheus scrape, with the bot key from .env; APP=<name> keeps that app's lines
+	@$(SERVICE) --key-env API_KEY $(if $(APP),--app $(APP)) metrics
+
+results: ## show the last package verification results
 	@cat output/e2e.json
 
 bench: build ## time the isolated cross-runtime acceptance workload

@@ -88,6 +88,22 @@ export async function startServer(config: Config, options: { publicDir: string; 
     };
   });
   const route = ({ request }: { request: Request }) => withStatus(rpc.fetch(request));
+  // The probes, named as the backplane names its own: liveness answers while the process serves, readiness also needs
+  // the backplane, without which no call can succeed. They report pass or fail only, never an error text.
+  const backplaneReady = "http://127.0.0.1:" + config.backplanePort + "/readyz";
+  const probes = {
+    name: "probes",
+    routes: ["/livez", "/healthz", "/readyz", "/health"].map((path) => ({ path })),
+    async fetch(request: Request) {
+      if (/^\/(livez|healthz)$/.test(new URL(request.url).pathname)) return Response.json({ service: "linear-clone", status: "pass" });
+      const ready = await fetch(backplaneReady, { signal: AbortSignal.timeout(2000) }).then(
+        (r) => r.ok,
+        () => false,
+      );
+      const status = ready ? "pass" : "fail";
+      return Response.json({ service: "linear-clone", status, checks: [{ name: "backplane", status }] }, { status: ready ? 200 : 503 });
+    },
+  };
   const tools = createMcpApi({ name: "linear-clone", version });
   await exposeRpc(tools, route, { codec: "json", include: (namespace) => namespace !== "Jobs" });
   const mcp = createMcpHttp(tools, { mode: "json", allowedOrigins: [] });
@@ -95,7 +111,7 @@ export async function startServer(config: Config, options: { publicDir: string; 
     host: "127.0.0.1",
     port: config.port,
     publicDir: options.publicDir,
-    plugins: [rpcPlugin({ fetch: (request: Request) => route({ request }) }), mcpPlugin(mcp)],
+    plugins: [rpcPlugin({ fetch: (request: Request) => route({ request }) }), mcpPlugin(mcp), probes],
     shutdownTimeoutMs: 3000,
     onDiagnostic: (event) => log.warn("serve " + event.code, { plugin: event.plugin }),
   });
