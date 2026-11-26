@@ -5,6 +5,7 @@
  * through RPC and read through the transport under test. */
 import { createServer } from "node:http";
 import { once } from "node:events";
+import { rpcCalls } from "defuss-rpc/client";
 import { createRpcServer } from "defuss-rpc/server";
 import { assert, type Ctx, rejects, sleep } from "./kit.ts";
 
@@ -114,7 +115,8 @@ export async function schedulerScenario({ ops, rpc, bucket, apiKey, step }: Ctx)
   await step("an _rpc schedule calls the app's function with the bot key and the X-Backplane headers", async () => {
     const calls: { args: unknown[]; headers: Record<string, string | undefined> }[] = [];
     let headers: Record<string, string | undefined> = {};
-    const app = createRpcServer({ Probe: { ping: async (...args: unknown[]) => calls.push({ args, headers }) } });
+    const api = { Probe: { ping: async (...args: unknown[]) => calls.push({ args, headers }) } };
+    const app = createRpcServer(api);
     const server = createServer(async (req, res) => {
       const chunks: Buffer[] = [];
       for await (const chunk of req) chunks.push(chunk as Buffer);
@@ -126,8 +128,8 @@ export async function schedulerScenario({ ops, rpc, bucket, apiKey, step }: Ctx)
     await once(server, "listening");
     const url = "http://127.0.0.1:" + (server.address() as { port: number }).port + "/rpc";
     try {
-      await rejects(q.create({ id: "far", handler: "_rpc", cron: yearly, payload: { url: "http://example.com/rpc", className: "Probe", methodName: "ping", args: [] } }), "INVALID_ARGUMENT", 400);
-      await q.create({ id: "cb", handler: "_rpc", cron: "* * * * * *", payload: { url, className: "Probe", methodName: "ping", args: [bucket] } }, { requestId: "create-cb" });
+      await rejects(q.create({ id: "far", handler: "_rpc", cron: yearly, payload: { url: "http://example.com/rpc", ...rpcCalls<typeof api>().Probe.ping() } }), "INVALID_ARGUMENT", 400);
+      await q.create({ id: "cb", handler: "_rpc", cron: "* * * * * *", payload: { url, ...rpcCalls<typeof api>().Probe.ping(bucket) } }, { requestId: "create-cb" });
       for (let i = 0; !calls.length && i < 100; i++) await sleep(100);
       assert.ok(calls.length, "the daemon called back");
       assert.deepEqual(calls[0].args, [bucket]);

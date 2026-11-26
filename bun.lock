@@ -13,7 +13,7 @@
         "defuss-logs": "0.3.0",
         "defuss-mcp": "0.6.2",
         "defuss-o11y": "0.3.0",
-        "defuss-rpc": "4.4.0",
+        "defuss-rpc": "4.5.0",
         "defuss-scheduler": "0.2.0",
         "defuss-serve": "0.4.0",
         "defuss-vfs": "0.3.0",
@@ -427,7 +427,7 @@
 
     "defuss-o11y": ["defuss-o11y@0.3.0", "", { "dependencies": { "@opentelemetry/api": "1.10.0", "@opentelemetry/core": "3.1.1", "@opentelemetry/exporter-metrics-otlp-http": "0.301.2", "@opentelemetry/exporter-prometheus": "0.301.2", "@opentelemetry/otlp-exporter-base": "0.301.2", "@opentelemetry/otlp-transformer": "0.301.2", "@opentelemetry/resources": "3.1.1", "@opentelemetry/sdk-metrics": "3.1.1" } }, "sha512-+q83sQJZqSy4y0Iqh9NzD/uZmcJezyv3Yt+FJ17EDvDbSWmb/4ksaTHp6YqLDtM4FkQ2gI4r5UpHC2cH2lx2LA=="],
 
-    "defuss-rpc": ["defuss-rpc@4.4.0", "", { "dependencies": { "defuss-dson": "^1.2.0", "ts-morph": "^28.0.0" }, "peerDependencies": { "@types/express": ">=5.0.0", "bunway": ">=1.1.0", "express": ">=5.0.0" }, "optionalPeers": ["@types/express", "bunway", "express"], "bin": { "defuss-rpc": "dist/cli.mjs" } }, "sha512-arXs6G5AvjMV9bcyB88yvySbs9F+zP/Gyh/GsfKPb2PGiowA4vTSbQ/UxzjORkkYl14rzjdVuYvGq/RHjvs99g=="],
+    "defuss-rpc": ["defuss-rpc@4.5.0", "", { "dependencies": { "defuss-dson": "^1.2.0", "ts-morph": "^28.0.0" }, "peerDependencies": { "@types/express": ">=5.0.0", "bunway": ">=1.1.0", "express": ">=5.0.0" }, "optionalPeers": ["@types/express", "bunway", "express"], "bin": { "defuss-rpc": "dist/cli.mjs" } }, "sha512-sTsD5T1c6N1aKVcpzdpimYUD5T/nRTW5koiPYS5vQM0Zb8uKKhfuXk02za1cCopSI0NiWUZv133HVcj+okYFmg=="],
 
     "defuss-scheduler": ["defuss-scheduler@0.2.0", "", { "dependencies": { "@lickle/lock": "0.0.1", "croner": "11.0.0", "defuss-brotli": "0.3.0", "defuss-dataview": "0.10.0", "defuss-dbsonl": "0.9.0", "defuss-dson": "1.5.1", "defuss-lexicalsearch": "0.4.0", "defuss-storage": "0.4.1" } }, "sha512-19Db1jChO/f2MVqnX5uQdhKcW6Xv89nMTxrZk76aNJ0oCEkAU08fglIjNoqDTFQ2/Jo3VSjUMfxxnj4mfnF/NQ=="],
 

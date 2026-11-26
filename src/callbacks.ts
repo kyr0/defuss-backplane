@@ -1,16 +1,20 @@
 /** VERIFIED: A schedule whose handler is `_rpc` needs no worker in the app: at each occurrence the daemon calls the
- * app's defuss-rpc function named in the payload, with the payload's arguments. defuss-scheduler 0.2.0 `ready` names
- * the scopes with due callbacks, so one dispatcher serves every app without claiming in idle scopes. */
+ * app's defuss-rpc function named in the payload, with the payload's arguments. defuss-scheduler's `ready` names the
+ * scopes with due callbacks, so one dispatcher serves every app without claiming in idle scopes. The payload is the
+ * callback's `url` plus a defuss-rpc call, as `rpcCalls` builds it; `parseRpcCall` reads it and `encodeRpcCall`
+ * writes the request body. Why defuss-rpc's functions and not a body of our own: defuss-rpc owns its wire format, so
+ * schedules stored today keep working when it changes. */
 import { isDeepStrictEqual } from "node:util";
 import { DSON } from "defuss-dson";
+import { encodeRpcCall, parseRpcCall, type RpcCall } from "defuss-rpc/client";
 import type { Json, Queue, Run, Scheduler, Scope, WorkerPort } from "defuss-scheduler";
 import { PermanentFailure, startWorker } from "defuss-scheduler/worker";
 import { reason } from "./log.js";
 
 /** The handler the daemon runs itself. Handler names starting with `_` belong to the daemon, like app names. */
 export const RPC_HANDLER = "_rpc";
-/** Where and what the daemon calls: a defuss-rpc endpoint such as `http://127.0.0.1:3000/rpc` and one function. */
-export type RpcCallback = { url: string; className: string; methodName: string; args?: Json[] };
+/** Where and what the daemon calls: a defuss-rpc endpoint such as `http://127.0.0.1:3000/rpc` and one call. */
+export type RpcCallback = { url: string; call: RpcCall };
 
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]"]);
 const POLL_MS = 250;
@@ -31,12 +35,15 @@ export function callback(payload: unknown, origins: ReadonlySet<string>): RpcCal
     !p ||
     typeof p !== "object" ||
     Array.isArray(p) ||
-    Object.keys(p).some((k) => !["url", "className", "methodName", "args"].includes(k))
+    Object.keys(p).some((k) => !["url", "v", "className", "methodName", "args"].includes(k))
   )
-    throw new TypeError("An _rpc payload holds url, className, methodName and optional args");
+    throw new TypeError("An _rpc payload holds url and a defuss-rpc call: className, methodName, optional args and v");
   if (typeof p.className !== "string" || !p.className || typeof p.methodName !== "string" || !p.methodName)
     throw new TypeError("className and methodName must be non-empty strings");
   if (p.args !== undefined && !Array.isArray(p.args)) throw new TypeError("args must be an array");
+  // A payload without `v` predates defuss-rpc's call versions and reads as version 1.
+  const call = parseRpcCall({ v: p.v, className: p.className, methodName: p.methodName, args: p.args ?? [] });
+  if (!call) throw new TypeError("v must be a call version that defuss-rpc knows");
   let url: URL;
   try {
     url = new URL(p.url as string);
@@ -47,7 +54,7 @@ export function callback(payload: unknown, origins: ReadonlySet<string>): RpcCal
     throw new TypeError("url must use http or https, without credentials or fragment");
   if (!LOOPBACK.has(url.hostname) && !origins.has(url.origin))
     throw new TypeError("url must be on loopback or an origin listed in BACKPLANE_CALLBACK_ORIGINS");
-  return { url: url.href, className: p.className, methodName: p.methodName, args: (p.args as Json[]) ?? [] };
+  return { url: url.href, call };
 }
 
 /** At most RESULT_BYTES of the response text; undefined for a longer body, which is cancelled. */
@@ -84,19 +91,20 @@ export function startCallbacks(
     } catch (error) {
       throw new PermanentFailure(reason(error));
     }
+    const request = encodeRpcCall(target.call);
     const response = await fetch(target.url, {
-      method: "POST",
+      method: request.method,
       redirect: "error",
       signal: AbortSignal.any([signal, AbortSignal.timeout(TIMEOUT_MS)]),
       headers: {
-        "content-type": "application/json",
+        ...request.headers,
         authorization: "Bearer " + options.apiKey,
         // Delivery is at least once: the app drops a repeated run ID.
         "x-backplane-schedule": run.scheduleId,
         "x-backplane-run": run.id,
         "x-backplane-attempt": String(run.attempt),
       },
-      body: DSON.stringify({ className: target.className, methodName: target.methodName, args: target.args }),
+      body: request.body,
     });
     const text = await bounded(response);
     if (!response.ok) {

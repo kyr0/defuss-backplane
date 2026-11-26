@@ -2,9 +2,11 @@
  * `Jobs.dueDigest` and `Jobs.cycleRollover` over RPC (handler `_rpc`), with the bot key. Why the backplane's scheduler:
  * schedules, retries and run history survive the app's restarts, and agents can inspect them over MCP. */
 import { timingSafeEqual } from "node:crypto";
+import { rpcCalls } from "defuss-rpc/client";
 import { dueDigest } from "../core/digest.ts";
 import type { Notification } from "../core/model.ts";
 import { planRollover } from "../core/rollover.ts";
+import type { Api } from "./api.ts";
 import type { Workspace } from "./workspace.ts";
 
 /** The actor of changes the jobs make. */
@@ -38,6 +40,11 @@ async function liveSchedule(queue: Queue, job: string, first: Schedule | null) {
   return null;
 }
 
+/** The calls the schedules carry, built from the API type: a renamed job fails to compile, and defuss-rpc owns the
+ * wire format. Why a map and not `Jobs[methodName]()`: TypeScript cannot call a union of generic builders. */
+const jobs = rpcCalls<Api>().Jobs;
+const JOB_CALLS = { dueDigest: () => jobs.dueDigest(), cycleRollover: () => jobs.cycleRollover() };
+
 /** Creates each job's schedule, or updates one whose cron, time zone or callback differ, such as the app's URL after
  * a restart on another port. A paused schedule stays paused. Returns what happened to each job. VERIFIED:
  * defuss-scheduler keeps the ID of a removed or terminated schedule reserved, so after an agent removed or terminated
@@ -46,7 +53,7 @@ async function liveSchedule(queue: Queue, job: string, first: Schedule | null) {
 export async function upsertSchedules(queue: Queue, rpcUrl: string, timeZone: string, list: JobSchedule[]) {
   const outcome: Record<string, "created" | "updated" | "unchanged"> = {};
   for (const { id, cron, methodName } of list) {
-    const payload = { url: rpcUrl, className: "Jobs", methodName, args: [] };
+    const payload = { url: rpcUrl, ...JOB_CALLS[methodName]() };
     const first = await queue.get(id);
     const current = await liveSchedule(queue, id, first);
     if (!current) {

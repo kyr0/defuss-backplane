@@ -1,4 +1,5 @@
 import { test, expect } from "bun:test";
+import { rpcCalls } from "defuss-rpc/client";
 import { createRpcServer } from "defuss-rpc/server";
 import { BackplaneError, connectBackplane } from "../src/client.js";
 import { start } from "./daemon.js";
@@ -16,18 +17,21 @@ async function until<T>(read: () => Promise<T>, done: (value: T) => boolean, ms 
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
 }
+/** What the app below serves, the type its schedules are built from. */
+type AppApi = { jobs: { notify(text: string, count: number): Promise<{ ok: boolean }> } };
 /** An app's own defuss-rpc server on loopback, as an app service would run it. */
 function app(answer?: (request: Request) => Response | undefined) {
   const calls: { args: unknown[]; headers: Headers }[] = [];
   let last: Headers | undefined;
-  const rpc = createRpcServer({
+  const api: AppApi = {
     jobs: {
       async notify(...args: unknown[]) {
         calls.push({ args, headers: last! });
         return { ok: true };
       },
     },
-  });
+  };
+  const rpc = createRpcServer(api);
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -131,3 +135,24 @@ test("an invalid BACKPLANE_CALLBACK_ORIGINS value stops startup", async () => {
     "BACKPLANE_CALLBACK_ORIGINS must list origins",
   );
 });
+
+test("a payload built with rpcCalls runs like the flat one, and a call version defuss-rpc does not know is refused", async () => {
+  const { stop } = await start();
+  const target = app();
+  try {
+    const queue = (await connectBackplane({ app: "shop" })).tenant("acme").scheduler("typed");
+    const call = rpcCalls<AppApi>().jobs.notify("typed", 3);
+    expect(call).toEqual({ v: 1, className: "jobs", methodName: "notify", args: ["typed", 3] });
+    const created = await queue.create({ id: "typed", cron: "* * * * * *", handler: "_rpc", payload: { url: target.url, ...call } });
+    const calls = await until(async () => target.calls, (c) => c.length > 0);
+    await queue.pause("typed", { revision: created.revision, requestId: "pause-typed" });
+    expect(calls[0].args).toEqual(["typed", 3]);
+    const yearly = { cron: "0 0 1 1 *", handler: "_rpc" };
+    // A version this defuss-rpc does not know, as a newer app could store it.
+    const future = { url: target.url, ...call, v: 2 };
+    expect(await fault(queue.create({ ...yearly, id: "future", payload: future }))).toBe("INVALID_ARGUMENT 400");
+  } finally {
+    target.stop();
+    await stop();
+  }
+}, 20000);

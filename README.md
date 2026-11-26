@@ -223,19 +223,23 @@ Edits take `change: { revision, requestId }`. A stale revision fails with `REVIS
 
 ### RPC callbacks
 
-A schedule with handler `_rpc` needs no worker and no cron of the app's own. At each occurrence the daemon calls the [defuss-rpc](https://github.com/kyr0/defuss-rpc) function that the payload names, with the payload's arguments.
+A schedule with handler `_rpc` needs no worker and no cron of the app's own. At each occurrence the daemon calls the [defuss-rpc](https://github.com/kyr0/defuss-rpc) function that the payload names, with the payload's arguments. Build the call with defuss-rpc's `rpcCalls` from your API type, so a renamed function or a wrong argument fails to compile, and the wire format stays defuss-rpc's business.
 
 ```ts
+import { rpcCalls } from "defuss-rpc/client";
+import type { RpcApi } from "./api.ts"; // the namespace object your app serves
+
+const calls = rpcCalls<RpcApi>();
 await tenant.scheduler("jobs").create({
   id: "nightly-report",
   cron: "0 2 * * *",
   timezone: "Europe/Berlin",
   handler: "_rpc",
-  payload: { url: "http://127.0.0.1:3000/rpc", className: "ReportApi", methodName: "nightly", args: [{ days: 1 }] },
+  payload: { url: "http://127.0.0.1:3000/rpc", ...new calls.ReportApi().nightly({ days: 1 }) },
 });
 ```
 
-The daemon sends a [defuss-rpc](https://github.com/kyr0/defuss-rpc) request: `POST` to `url` with the DSON body `{className, methodName, args}`. Its headers are `Authorization: Bearer <API_KEY>`, `X-Backplane-Schedule`, `X-Backplane-Run` and `X-Backplane-Attempt`. The app compares the bearer token with its own bot key. Delivery is at least once, so the app should drop a run ID it has already handled. The run stores `{status, result}`, where `result` is the function's return value when it is JSON and null otherwise.
+The payload is the callback's `url` plus the call, `{ v, className, methodName, args }`, which agents read as plain JSON. A payload without `v`, written before defuss-rpc versioned its calls, still runs, and a `v` that defuss-rpc does not know fails `create` with `INVALID_ARGUMENT`. The daemon sends the call with defuss-rpc's `encodeRpcCall`: `POST` to `url` with the DSON body. Its headers are `Authorization: Bearer <API_KEY>`, `X-Backplane-Schedule`, `X-Backplane-Run` and `X-Backplane-Attempt`. The app compares the bearer token with its own bot key. Delivery is at least once, so the app should drop a run ID it has already handled. The run stores `{status, result}`, where `result` is the function's return value when it is JSON and null otherwise.
 
 `url` must use http or https on `127.0.0.1`, `localhost` or `[::1]`, or an origin listed in `BACKPLANE_CALLBACK_ORIGINS`, because the daemon sends its bot key along. A payload that breaks these rules fails `create` or `update` with `INVALID_ARGUMENT`. A call fails after 60 seconds or on a redirect. An answer with status 2xx completes the run. A 4xx answer other than 408 and 429 fails it for good. Other failures retry within the schedule's retry policy. Each failed call logs a `WARN` line to the `_backplane` log. The daemon checks for due callbacks every 250 ms.
 
