@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
-import { addHook, clearHooks, setHeaders } from "defuss-rpc/client";
-import { BackplaneError, connectBackplane } from "../src/client.js";
+import { addHook, clearHooks, createRpcContext, setHeaders } from "defuss-rpc/client";
+import { type BackplaneApi, BackplaneError, connectBackplane } from "../src/client.js";
 import { start } from "./daemon.js";
 
 const scope = { app: "shop", tenant: "acme", bucket: "catalog" };
@@ -87,5 +87,26 @@ test("a connection sends one schema request and refuses a redirected one", async
   } finally {
     moved.stop(true);
     elsewhere.stop(true);
+  }
+});
+
+test("a plain defuss-rpc client typed with BackplaneApi calls the daemon with the scope first", async () => {
+  const { daemon, headers, stop } = await start();
+  try {
+    const rpc = await createRpcContext({ baseUrl: daemon.url, headers }).getRpcClient<BackplaneApi>();
+    expect(await rpc.cache.set(scope, "k", { at: new Date(0) })).toBe(true);
+    expect(await rpc.cache.get(scope, "k")).toEqual({ hit: true, value: { at: new Date(0) } });
+    const id = await rpc.db.insert(scope, { item: "A7" });
+    expect(await rpc.db.get(scope, id)).toEqual({ id, item: "A7" });
+    expect((await rpc.logs.write({ app: scope.app }, [{ level: "info", message: "plain" }])).written).toBe(1);
+    expect((await rpc.scheduler.list(scope)).items).toEqual([]);
+    // The handles of connectBackplane see what the plain client wrote.
+    const shop = await connectBackplane({ app: scope.app, port: Number(new URL(daemon.url).port), apiKey: headers.Authorization.slice(7) });
+    expect(await shop.tenant(scope.tenant).cache(scope.bucket).get("k")).toEqual({ hit: true, value: { at: new Date(0) } });
+    // VERIFIED: a plain client sees the daemon's error status and body, which connectBackplane turns into BackplaneError.
+    const failure = await rpc.db.query(scope, { limit: 1001 }).catch((e: { status: number; body: string }) => e);
+    expect([(failure as { status: number }).status, JSON.parse((failure as { body: string }).body).code]).toEqual([400, "INVALID_ARGUMENT"]);
+  } finally {
+    await stop();
   }
 });

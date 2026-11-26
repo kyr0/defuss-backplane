@@ -1,10 +1,11 @@
-/** VERIFIED: Each connection is a defuss-rpc 4.4.0 client context with the bot key, so the application's `addHook()`
- * and `setHeaders()` never reach backplane calls. VERIFIED by probe with 4.1.0: through the process-wide client, a
+/** VERIFIED: Each connection is a defuss-rpc client context with the bot key, so the application's `addHook()`
+ * and `setHeaders()` never reach backplane calls. Its RPC client is typed with `BackplaneApi`, the namespace the daemon
+ * serves, so every handle method is checked against the server's signature; plain defuss-rpc callers use the same type. VERIFIED by probe with 4.1.0: through the process-wide client, a
  * client guard of the application blocked a backplane call. Every failure is a `BackplaneError`. */
 import { createRpcContext } from "defuss-rpc/client";
 import type { Document, NewDocument } from "defuss-db";
 import type { CacheResult } from "./cache.js";
-import type { Row, Query } from "./db.js";
+import type { InputRow, Query, Row } from "./db.js";
 import type {
   VfsDownload,
   VfsHead,
@@ -20,12 +21,14 @@ import type { LogEntry, LogPage, LogReadRequest } from "./logs.js";
 import { settings } from "./config.js";
 
 import { BackplaneError, statuses, type ErrorCode } from "./errors.js";
+import type { BackplaneApi } from "./api.js";
 import type {
   CacheWriteOptions,
   Versioned,
   WriteOptions,
 } from "./revisions.js";
 export { BackplaneError };
+export type { BackplaneApi } from "./api.js";
 export type { ErrorCode, CacheWriteOptions, Versioned, WriteOptions };
 export type { Scope } from "./scope.js";
 export type {
@@ -129,32 +132,25 @@ export async function connectBackplane(options: {
       Object.keys(m.methods).map((k) => (m.kind === "module" ? m.moduleName : m.className) + "." + k),
     ),
   );
-  type Caller = (...args: unknown[]) => Promise<unknown>;
   // Built from the schema in hand, so a connection sends one schema request.
-  const rpc = await context.getRpcClient<Record<string, Record<string, Caller>>>({ schema });
+  const rpc = await context.getRpcClient<BackplaneApi>({ schema });
+  /** The streaming routes are no RPC methods; the schema still tells a daemon without the VFS service apart. */
   function ensure(method: string) {
     if (!methods.has(method))
       throw new Error("Method missing from server schema");
   }
-  async function call<T>(
-    className: string,
-    methodName: string,
-    args: unknown[],
-  ): Promise<T> {
-    ensure(className + "." + methodName);
-    return (await rpc[className][methodName](...args).catch(rethrow)) as T;
-  }
+  /** Every failure of a call becomes a BackplaneError. */
+  const run = <T>(call: Promise<T>) => call.catch(rethrow);
   /** One log: the app's own, or one tenant's when `tenant` is given. The handle is also a defuss-logs batch writer, so
    * `createBatchSink(handle)` lets a defuss-logs logger in the application write here. VERIFIED by probe: DSON text
    * spells binary arguments at up to 3.6 times their encoded size, so a batch of at most 256 KiB stays under the
    * 1 MiB RPC body limit. */
   function logs(tenant?: string) {
     const scope = tenant === undefined ? { app } : { app, tenant };
-    const write = (entries: readonly LogEntry[]) =>
-      call<{ written: number }>("logs", "write", [scope, entries]);
+    const write = (entries: readonly LogEntry[]) => run(rpc.logs.write(scope, entries));
     return {
       write,
-      read: (request: LogReadRequest = {}) => call<LogPage>("logs", "read", [scope, request]),
+      read: (request: LogReadRequest = {}): Promise<LogPage> => run(rpc.logs.read(scope, request)),
       maxIngestBatchRecords: 1000,
       maxIngestBatchBytes: 256 * 1024,
       maxLogRecordBytes: 256 * 1024,
@@ -179,36 +175,25 @@ export async function connectBackplane(options: {
         cache(bucket: string) {
           const scope = { app, tenant, bucket };
           return {
-            get: (key: string) =>
-              call<CacheResult>("cache", "get", [scope, key]),
-            getVersioned: (key: string) =>
-              call<Versioned<unknown>>("cache", "getVersioned", [scope, key]),
-            set: (
-              key: string,
-              value: unknown,
-              ttlMs?: number | CacheWriteOptions,
-            ) => call<boolean>("cache", "set", [scope, key, value, ttlMs]),
-            delete: (key: string, options?: WriteOptions) =>
-              call<boolean>("cache", "delete", [scope, key, options]),
+            get: (key: string): Promise<CacheResult> => run(rpc.cache.get(scope, key)),
+            getVersioned: (key: string) => run(rpc.cache.getVersioned(scope, key)) as Promise<Versioned<unknown>>,
+            set: (key: string, value: unknown, ttlMs?: number | CacheWriteOptions) =>
+              run(rpc.cache.set(scope, key, value, ttlMs)),
+            delete: (key: string, options?: WriteOptions) => run(rpc.cache.delete(scope, key, options)),
           };
         },
         db<T extends Document = Row>(bucket: string) {
           const scope = { app, tenant, bucket };
           return {
-            get: (id: T["id"]) => call<T | null>("db", "get", [scope, id]),
-            getVersioned: (id: T["id"]) =>
-              call<Versioned<T>>("db", "getVersioned", [scope, id]),
+            // The daemon stores any document; `T` narrows what this handle reads and writes.
+            get: (id: T["id"]) => run(rpc.db.get(scope, id)) as Promise<T | null>,
+            getVersioned: (id: T["id"]) => run(rpc.db.getVersioned(scope, id)) as Promise<Versioned<T>>,
             insert: (doc: NewDocument<T>, options?: { ifRevision?: null }) =>
-              call<T["id"]>("db", "insert", [scope, doc, options]),
-            update: (
-              id: T["id"],
-              patch: Partial<Omit<T, "id">>,
-              options?: WriteOptions,
-            ) => call<boolean>("db", "update", [scope, id, patch, options]),
-            delete: (id: T["id"], options?: WriteOptions) =>
-              call<boolean>("db", "delete", [scope, id, options]),
-            query: (request: Query = {}) =>
-              call<{ rows: Partial<T>[] }>("db", "query", [scope, request]),
+              run(rpc.db.insert(scope, doc as InputRow, options)) as Promise<T["id"]>,
+            update: (id: T["id"], patch: Partial<Omit<T, "id">>, options?: WriteOptions) =>
+              run(rpc.db.update(scope, id, patch, options)),
+            delete: (id: T["id"], options?: WriteOptions) => run(rpc.db.delete(scope, id, options)),
+            query: (request: Query = {}) => run(rpc.db.query(scope, request)) as Promise<{ rows: Partial<T>[] }>,
           };
         },
         /** One scheduler queue. It is also a defuss-scheduler WorkerPort, so `startWorker` accepts it. A schedule with
@@ -218,10 +203,9 @@ export async function connectBackplane(options: {
           const method =
             <K extends keyof Queue>(name: K) =>
             (...args: Parameters<Queue[K]>) =>
-              call<Awaited<ReturnType<Queue[K]>>>("scheduler", name, [
-                scope,
-                ...args,
-              ]);
+              run<Awaited<ReturnType<Queue[K]>>>(
+                (rpc.scheduler[name] as unknown as (...a: unknown[]) => Promise<Awaited<ReturnType<Queue[K]>>>)(scope, ...args),
+              );
           return {
             create: method("create"),
             get: method("get"),
@@ -248,15 +232,12 @@ export async function connectBackplane(options: {
             "/vfs/object?" +
             new URLSearchParams({ app, tenant, bucket, key });
           return {
-            put: (key: string, data: string | Uint8Array, options?: WriteOptions) =>
-              call<VfsObject>("vfs", "put", [scope, key, data, options]),
-            get: (key: string, range?: VfsRange) =>
-              call<VfsRead>("vfs", "get", [scope, key, range]),
-            head: (key: string) => call<VfsHead>("vfs", "head", [scope, key]),
-            list: (request: VfsListRequest = {}) =>
-              call<VfsPage>("vfs", "list", [scope, request]),
-            delete: (key: string, options?: WriteOptions) =>
-              call<boolean>("vfs", "delete", [scope, key, options]),
+            put: (key: string, data: string | Uint8Array, options?: WriteOptions): Promise<VfsObject> =>
+              run(rpc.vfs.put(scope, key, data, options)),
+            get: (key: string, range?: VfsRange): Promise<VfsRead> => run(rpc.vfs.get(scope, key, range)),
+            head: (key: string): Promise<VfsHead> => run(rpc.vfs.head(scope, key)),
+            list: (request: VfsListRequest = {}): Promise<VfsPage> => run(rpc.vfs.list(scope, request)),
+            delete: (key: string, options?: WriteOptions) => run(rpc.vfs.delete(scope, key, options)),
             /** Streams `body` into one object, which replaces the previous one only after the last byte arrives. */
             async upload(
               key: string,

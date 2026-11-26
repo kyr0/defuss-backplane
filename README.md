@@ -130,6 +130,25 @@ console.log(cached, page.rows);
 
 The client sends credentials on its initial schema request and subsequent calls. It sends each immutable scope with the operation. RPC accepts DSON values, including dates and binary data.
 
+### Plain defuss-rpc
+
+`connectBackplane` is a typed layer over a defuss-rpc client. Its handles bind the scope, turn failures into `BackplaneError`, refuse redirects, read `PORT` and `API_KEY`, stream files and adapt logs and the scheduler to defuss-logs and defuss-scheduler. Without that layer, the package's `BackplaneApi` type types a plain [defuss-rpc](https://github.com/kyr0/defuss-rpc) client, and every method takes the scope first.
+
+```ts
+import type { BackplaneApi } from "defuss-backplane/client";
+import { createRpcContext } from "defuss-rpc/client";
+
+const rpc = await createRpcContext({
+  baseUrl: "http://127.0.0.1:43127",
+  headers: { Authorization: `Bearer ${process.env.API_KEY}` },
+}).getRpcClient<BackplaneApi>();
+const scope = { app: "shop", tenant: "acme", bucket: "catalog" };
+await rpc.cache.set(scope, "currency", "EUR");
+const page = await rpc.db.query(scope, { limit: 25 });
+```
+
+A failed call then throws defuss-rpc's error, which carries the daemon's HTTP `status` and its JSON `body` with `code`. Logs take `{ app, tenant? }` as their scope.
+
 ## Conditional writes
 
 Read a revision when a backend or agent will edit a value. A hit returns `{found:true,value,revision}`. Pass the token to the write. A competing update or delete returns `REVISION_CONFLICT`. Read again and decide whether the edit still applies.

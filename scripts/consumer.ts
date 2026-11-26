@@ -4,7 +4,8 @@ import { checkVfs } from "./consumer-vfs.ts";
 import { connectMcp } from "./consumer-mcp.ts";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { connectBackplane, type Scope } from "defuss-backplane/client";
+import { type BackplaneApi, connectBackplane, type Scope } from "defuss-backplane/client";
+import { createRpcContext } from "defuss-rpc/client";
 
 for (const name of [
   "onnxruntime-node",
@@ -20,6 +21,14 @@ const tenant = client.tenant(scope.tenant);
 const cache = tenant.cache(scope.bucket),
   db = tenant.db(scope.bucket);
 const agent = await connectMcp("packed-consumer");
+// The published BackplaneApi type types a plain defuss-rpc client, which reads what the handles wrote.
+const plain = await createRpcContext({
+  baseUrl: "http://127.0.0.1:" + process.env.PORT,
+  headers: { Authorization: "Bearer " + process.env.API_KEY },
+}).getRpcClient<BackplaneApi>();
+await cache.set("plain-" + phase, phase);
+assert.deepEqual(await plain.cache.get(scope, "plain-" + phase), { hit: true, value: phase });
+assert.equal(await plain.cache.delete(scope, "plain-" + phase), true);
 /** Calls a tool that must succeed and returns its `structuredContent.value`, typed by the caller. */
 async function call<T = unknown>(
   name: string,
