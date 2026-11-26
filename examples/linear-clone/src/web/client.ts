@@ -1,10 +1,12 @@
-/** VERIFIED: scripts/e2e.ts drives it in Chromium, Firefox and WebKit. The browser's RPC client: a defuss-rpc context on the page's own origin, which needs no key. The server types the
- * calls: `type Api` comes from the server module and is erased from the bundle. */
+/** VERIFIED: scripts/e2e.ts drives it in Chromium, Firefox and WebKit. The browser's RPC client: a defuss-rpc context
+ * on the page's own origin, whose requests the signed-in session carries (session.ts). The server types the calls:
+ * `type Api` comes from the server module and is erased from the bundle. */
 import { createRpcContext } from "defuss-rpc/client";
 import { type Fault, parseFault } from "../core/faults.ts";
 import type { Api } from "../server/api.ts";
+import { rpcFetch } from "./session.ts";
 
-export const rpc = createRpcContext({ baseUrl: location.origin });
+export const rpc = createRpcContext({ baseUrl: location.origin, fetch: rpcFetch });
 let client: Api | undefined;
 
 export async function connect() {

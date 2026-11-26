@@ -24,12 +24,16 @@ function mask(value: unknown): unknown {
 
 /** Runs the comparison; returns one `[step, error | null]` per tool group, for the e2e report. */
 export async function checkApi(baseUrl: string, mcpConfig: string): Promise<[string, string | null][]> {
-  const { mcpServers } = JSON.parse(await readFile(mcpConfig, "utf8")) as { mcpServers: Record<string, { type: string; url: string }> };
+  const { mcpServers } = JSON.parse(await readFile(mcpConfig, "utf8")) as {
+    mcpServers: Record<string, { type: string; url: string; headers?: Record<string, string> }>;
+  };
   const server = mcpServers["linear-clone"];
   assert.equal(server?.type, "http", "mcp.json has an http entry for linear-clone");
+  // Both transports send the agent's key from mcp.json, so both act as the same person.
+  const headers = server.headers ?? {};
   const agent = new Client({ name: "e2e", version: "1" });
-  await agent.connect(new StreamableHTTPClientTransport(new URL(server.url)));
-  const rpc = await createRpcContext({ baseUrl }).getRpcClient<Api>();
+  await agent.connect(new StreamableHTTPClientTransport(new URL(server.url), { requestInit: { headers } }));
+  const rpc = await createRpcContext({ baseUrl, headers }).getRpcClient<Api>();
   const called = new Set<string>();
 
   async function viaMcp(name: string, ...args: unknown[]): Promise<Outcome> {

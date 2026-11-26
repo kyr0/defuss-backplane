@@ -6,12 +6,17 @@ export type Config = {
   port: number;
   /** `BACKPLANE_PORT`: the defuss-backplane daemon on 127.0.0.1. */
   backplanePort: number;
-  /** `BACKPLANE_API_KEY`: the daemon's `API_KEY`, sent as the bot key. Required. */
+  /** `BACKPLANE_API_KEY`: the app's bot key from the backplane's `make bot APP=linear-clone`. The daemon's root
+   * `API_KEY` works too, but reaches every app. Required. */
   backplaneApiKey: string;
-  /** `WORKSPACE`: the backplane tenant that holds the workspace. */
+  /** `WORKSPACE`: the backplane tenant that holds the workspace, and the auth tenant its people sign in to. */
   workspace: string;
-  /** `VIEWER`: the person whom "My issues", comments and the activity feed refer to, until user auth exists. */
-  viewer: string;
+  /** `PUBLIC_ORIGIN`: the origin the browser loads the app from, such as `https://tracker.example`; the default is the
+   * listener's `http://127.0.0.1:<PORT>`. Sign-in accepts writes from this origin only. */
+  publicOrigin: string;
+  /** `AUTH_MODE`: `cookie` keeps the refresh token in an HttpOnly cookie, `token` gives it to the page, for browsers
+   * that drop Secure cookies over plain HTTP, such as WebKit. */
+  authMode: "cookie" | "token";
   /** `TIME_ZONE`: the IANA zone whose calendar decides today, due dates and cycle days. */
   timeZone: string;
   /** `DIGEST_CRON` and `ROLLOVER_CRON`: when the backplane runs the due digest and the cycle rollover, in `timeZone`. */
@@ -39,7 +44,8 @@ export function loadConfig(env: Env = process.env): Config {
     backplanePort: port(env, "BACKPLANE_PORT", 43127, problems),
     backplaneApiKey: read(env, "BACKPLANE_API_KEY", ""),
     workspace: read(env, "WORKSPACE", "vector"),
-    viewer: read(env, "VIEWER", "aron"),
+    publicOrigin: "",
+    authMode: read(env, "AUTH_MODE", "cookie") as Config["authMode"],
     timeZone: read(env, "TIME_ZONE", "UTC"),
     digestCron: read(env, "DIGEST_CRON", "0 9 * * *"),
     rolloverCron: read(env, "ROLLOVER_CRON", "0 0 * * 1"),
@@ -51,9 +57,23 @@ export function loadConfig(env: Env = process.env): Config {
   if (!config.backplaneApiKey) problems.push("BACKPLANE_API_KEY is required: the daemon's API_KEY");
   else if (!/^[\x21-\x7e]+$/.test(config.backplaneApiKey))
     problems.push("BACKPLANE_API_KEY must contain printable ASCII without whitespace");
-  // VERIFIED: the daemon accepts a tenant of 1 to 48 UTF-8 bytes (defuss-backplane src/scope.ts). Checking here fails at
-  // startup instead of at the first call.
-  if (Buffer.byteLength(config.workspace) > 48) problems.push("WORKSPACE must have at most 48 UTF-8 bytes");
+  // VERIFIED: the backplane's auth takes tenant names of 1 to 48 letters, digits, - and _ (defuss-backplane
+  // src/auth.ts). Checking here fails at startup instead of at the first sign-in.
+  if (!/^[A-Za-z0-9_-]{1,48}$/.test(config.workspace))
+    problems.push("WORKSPACE must have 1 to 48 letters, digits, - and _");
+  // The default follows PORT, which is checked above; only an origin the operator set needs checking.
+  config.publicOrigin = read(env, "PUBLIC_ORIGIN", "http://127.0.0.1:" + config.port);
+  if (env.PUBLIC_ORIGIN) {
+    let origin: URL | undefined;
+    try {
+      origin = new URL(config.publicOrigin);
+    } catch {
+      origin = undefined;
+    }
+    if (!origin || !["http:", "https:"].includes(origin.protocol) || origin.origin !== config.publicOrigin)
+      problems.push("PUBLIC_ORIGIN must be an origin such as https://tracker.example, without a path");
+  }
+  if (config.authMode !== "cookie" && config.authMode !== "token") problems.push("AUTH_MODE must be cookie or token");
   try {
     new Intl.DateTimeFormat("en", { timeZone: config.timeZone });
   } catch {

@@ -11,6 +11,7 @@ import { createIcons } from "lucide";
 import type { Fields, Label, Priority, Status } from "../core/issue.ts";
 import * as act from "./actions.ts";
 import { api, connect } from "./client.ts";
+import { prompt, resume, signOut } from "./session.ts";
 import { toast, ui } from "./env.ts";
 import { initials } from "./format.ts";
 import { ICONS } from "./icons.tsx";
@@ -25,6 +26,8 @@ if (document.readyState === "loading") await new Promise((done) => df$(document)
 const app = df$<HTMLElement>("[data-pm]")[0]!;
 const VIEWS: View[] = ["my-issues", "inbox", "cycles", "projects"];
 
+// Signs in first: every call runs as the signed-in person.
+if (!(await resume())) await prompt();
 await connect();
 const [boot, issues, inbox] = await Promise.all([api().Workspace.bootstrap(), api().Issues.list(), api().Inbox.list()]);
 store.boot = boot;
@@ -36,6 +39,7 @@ createIcons({ icons: ICONS });
 const me = person(boot.viewer)?.name ?? boot.viewer;
 df$("[data-pm-viewer] .avatar-fallback", app).text(initials(me));
 df$("[data-pm-viewer-name]", app).text(me);
+df$("[data-pm-signout]", app).on("click", () => void signOut());
 const form = df$<HTMLFormElement>("[data-pm-new]", app);
 morph(form.find('select[name="assignee"]')[0]!, [
   <option value="">Assignee</option>,

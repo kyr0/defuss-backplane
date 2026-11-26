@@ -12,7 +12,7 @@ ROOT        = ../..
 BACKPLANE   = deps/defuss-backplane
 BACKPLANE_TGZ = $(ROOT)/output/defuss-backplane-$(shell node -p "require('$(ROOT)/package.json').version").tgz
 
-.PHONY: help setup build start stop restart status log metrics bench test coverage lint e2e verify logs mcp-config e2e-live health healthz
+.PHONY: help setup build start stop restart status log metrics bench test coverage lint e2e verify logs mcp-config e2e-live health healthz bot member apikey
 .DEFAULT_GOAL := help
 
 help: ## list the verbs with their usage (default goal)
@@ -21,14 +21,16 @@ help: ## list the verbs with their usage (default goal)
 # Why a directory extracted from the packed tarball: `file:../..` links the whole repository, var/ and node_modules
 # included, and a tarball dependency kept serving its first content after a repack (VERIFIED by probe on Bun 1.4.5).
 # `bun install` re-links a directory dependency's recreated files.
-setup: ## install pinned tools, pack the backplane from the repository root, the locked dependencies and a missing .env
+setup: ## install pinned tools, pack the backplane, the locked dependencies, a missing .env and this app's bot key
 	@if command -v mise >/dev/null 2>&1; then mise install; fi
 	$(MAKE) -C $(ROOT) pack
 	rm -rf $(BACKPLANE) && mkdir -p $(BACKPLANE)
 	tar xzf $(BACKPLANE_TGZ) -C $(BACKPLANE) --strip-components=1
 	bun install --frozen-lockfile
 	./node_modules/.bin/playwright-core install chromium firefox webkit
+	@$(MAKE) -s -C $(ROOT) env
 	@$(MAKE) -s .env
+	@$(ROOT_KEY) | bun src/server/admin.ts bot --if-needed || true
 
 build: ## bundle the server and the frontend into dist/
 	bun run build
@@ -64,9 +66,20 @@ logs: log
 # session at the repository root sees the backplane and the app. scripts/e2e.ts writes its own for the built app.
 MCP_ENV ?= .env
 MCP_OUT ?= .mcp.json $(ROOT)/.mcp.json
-mcp-config: ## write the app's MCP client entry into .mcp.json here and at the repository root, other servers kept
+mcp-config: ## write the app's MCP client entry, with AGENT_API_KEY from .env, into .mcp.json here and at the repository root
 	@node $(ROOT)/scripts/mcp-config.ts --name $(NAME) --env $(MCP_ENV) --url 'http://127.0.0.1:$${PORT:-43180}/mcp' \
-	  $(foreach f,$(MCP_OUT),--out $(f))
+	  --header 'Authorization: ApiKey $${AGENT_API_KEY}' $(foreach f,$(MCP_OUT),--out $(f))
+
+# The root key travels on stdin, so it shows in no process list and in no variable the app reads.
+ROOT_KEY = sed -n 's/^API_KEY=//p' $(ROOT)/.env | tail -n 1
+bot: ## a new key for this app's bot user, made with the root key from $(ROOT)/.env, into .env as BACKPLANE_API_KEY; prints JSON
+	@$(ROOT_KEY) | bun src/server/admin.ts bot
+
+member: ## give a person a sign-in: EMAIL=… PERSON=<id> [DISPLAY=<name>], the password read from stdin; prints JSON
+	@bun src/server/admin.ts member "$(EMAIL)" "$(PERSON)" "$(DISPLAY)"
+
+apikey: ## an agent's API key, acting as person agent-<name>: AGENT=<name> [PERSON=<id>]; prints it once as JSON
+	@bun src/server/admin.ts apikey "$(AGENT)" "$(PERSON)"
 
 health: ## readiness of the running app (/readyz: it answers and the backplane is ready) as JSON; exits 1 unless it passes
 	@$(SERVICE) --path /readyz probe

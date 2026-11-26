@@ -1,7 +1,8 @@
 /** VERIFIED: make e2e runs it against the built server. The browser end-to-end run, with Node.js: copies the built dist/ and the seed into a temporary directory, starts the
  * real defuss-backplane daemon and the built server there, and drives Chromium, Firefox and WebKit with
- * playwright-core. Chromium walks the whole journey; Firefox and WebKit open every route and create one issue. Every
- * page must stay free of console errors. Results go to output/e2e.json. */
+ * playwright-core. Every browser signs in first, as Aron. Chromium walks the whole journey; Firefox and WebKit open every
+ * route and create one issue. WebKit runs against a second instance in token mode, because it drops the Secure refresh
+ * cookie over plain HTTP. Every page must stay free of console errors. Results go to output/e2e.json. */
 import type { ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { execFile } from "node:child_process";
@@ -12,7 +13,8 @@ import { join } from "node:path";
 import { type Browser, type BrowserType, chromium, firefox, type Page, webkit } from "playwright-core";
 import { checkApi } from "./e2e-api.ts";
 import { runDeep } from "./e2e-deep.ts";
-import { freePort, launch, stop } from "./e2e-proc.ts";
+import { connectBackplane } from "defuss-backplane/client";
+import { admin, freePort, launch, stop } from "./e2e-proc.ts";
 import { FLOOR, keepCoverage, reportCoverage, startCoverage } from "./e2e-coverage.ts";
 
 const root = join(import.meta.dirname, "..");
@@ -37,7 +39,12 @@ async function openPage(browser: Browser, url: string, coverage = false) {
   });
   if (coverage) await startCoverage(page);
   await page.goto(url);
-  await page.waitForSelector("[data-pm][data-ready]");
+  if (coverage) {
+    // A wrong password first: the form says so. The browser logs the 401 as a console error, which this step expects.
+    await signIn(page, "wrong password");
+    errors.splice(0);
+  }
+  await signIn(page);
   return { page, errors };
 }
 
@@ -68,10 +75,24 @@ async function routes(page: Page) {
 type Step = [string, (page: Page, base: string) => Promise<void>];
 
 const ready = (page: Page) => page.waitForSelector("[data-pm][data-ready]");
+const EMAIL = "aron@example.com";
+const PASSWORD = "correct horse battery staple";
+/** Waits for the tracker, and signs in first when the page shows the sign-in form instead. */
+async function signIn(page: Page, password = PASSWORD) {
+  const form = page.locator("[data-pm-signin]:not([hidden])");
+  await Promise.race([form.waitFor(), ready(page)]);
+  if (!(await form.isVisible())) return;
+  await page.fill('[data-pm-signin-form] [name="email"]', EMAIL);
+  await page.fill('[data-pm-signin-form] [name="password"]', password);
+  await page.click('[data-pm-signin-form] button[type="submit"]');
+  if (password === PASSWORD) await ready(page);
+  else await page.waitForSelector("[data-pm-signin-error]:not([hidden])");
+}
+/** Reloads the page; in cookie mode the session resumes from the refresh cookie, in token mode it signs in again. */
 async function reload(page: Page) {
   await keepCoverage(page);
   await page.reload();
-  await ready(page);
+  await signIn(page);
 }
 async function go(page: Page, hash: string, section: string) {
   await page.evaluate((h) => (location.hash = h), hash);
@@ -230,6 +251,12 @@ const journeySteps: Step[] = [
     check((await page.locator("#projects tbody tr").count()) === 5, "expected 5 projects");
     await expectText(page, "#projects tbody tr", "Search 2.0");
   }],
+  ["the session resumes after a reload, without the sign-in form", async (page) => {
+    await keepCoverage(page);
+    await page.reload();
+    await ready(page);
+    check(!(await page.locator("[data-pm-signin]:not([hidden])").isVisible()), "the sign-in form showed after a reload");
+  }],
   ["language after reload", async (page) => {
     await page.click(".pm-me");
     await page.locator("#pm-lang").getByText("Deutsch").first().click();
@@ -239,6 +266,16 @@ const journeySteps: Step[] = [
     await page.click(".pm-me");
     await page.locator("#pm-lang").getByText("English").first().click();
     await expectText(page, ".sidebar-link", "Inbox");
+  }],
+  ["log out shows the sign-in form, and a reload does not resume", async (page) => {
+    // Sign-out reloads the page itself, so the coverage so far is kept first.
+    await keepCoverage(page);
+    await page.click('[data-dropdown-trigger="pm-ws-menu"]');
+    await page.click("#pm-ws-menu [data-pm-signout]");
+    await page.waitForSelector("[data-pm-signin]:not([hidden])");
+    await keepCoverage(page);
+    await page.reload();
+    await page.waitForSelector("[data-pm-signin]:not([hidden])");
   }],
 ];
 
@@ -251,6 +288,7 @@ async function run() {
   const apiKey = randomBytes(24).toString("hex");
   const backplanePort = await freePort();
   const port = await freePort();
+  const tokenPort = await freePort();
   const children: ChildProcess[] = [];
   const checks: Check[] = [];
   let coverage: Awaited<ReturnType<typeof reportCoverage>> | null = null;
@@ -259,18 +297,25 @@ async function run() {
       await launch(
         ["node", join(root, "node_modules/defuss-backplane/dist/cli.js")],
         work,
-        { PORT: String(backplanePort), API_KEY: apiKey, BACKPLANE_DATA_DIR: join(work, "backplane") },
+        {
+          PORT: String(backplanePort),
+          API_KEY: apiKey,
+          BACKPLANE_DATA_DIR: join(work, "backplane"),
+          BACKPLANE_AUTH_MASTER_KEY: randomBytes(32).toString("base64url"),
+        },
         /listening|127\.0\.0\.1:\d+/,
       ),
     );
-    children.push(
-      await launch(
-        ["bun", "dist/server.js"],
-        app,
-        { PORT: String(port), BACKPLANE_PORT: String(backplanePort), BACKPLANE_API_KEY: apiKey, TIME_ZONE: "UTC" },
-        / INFO listening /,
-      ),
-    );
+    // The app's own bot, as `make bot APP=linear-clone` makes it; the app never holds the root key.
+    const botKey = (
+      await (await connectBackplane({ app: "linear-clone", port: backplanePort, apiKey })).bots.create({ name: "linear-clone", apps: ["linear-clone"] })
+    ).key;
+    const appEnv = { BACKPLANE_PORT: String(backplanePort), BACKPLANE_API_KEY: botKey, TIME_ZONE: "UTC" };
+    const startApp = async (listen: number, mode: "cookie" | "token") =>
+      children.push(await launch(["bun", "dist/server.js"], app, { ...appEnv, PORT: String(listen), AUTH_MODE: mode }, / INFO listening /));
+    await startApp(port, "cookie");
+    const member = admin(root, appEnv, ["member", EMAIL, "aron"], PASSWORD + "\n");
+    log("member", { person: "aron", created: String((member as { created?: boolean }).created) });
     const base = "http://127.0.0.1:" + port + "/";
     log("services ready", { url: base });
     const engines: [string, BrowserType, Step[]][] = [
@@ -279,13 +324,16 @@ async function run() {
       ["webkit", webkit, smokeSteps],
     ];
     for (const [name, engine, steps] of engines) {
+      // The token-mode instance starts last: each start registers its origin, and one app has one.
+      if (name === "webkit") await startApp(tokenPort, "token");
       const browser = await engine.launch();
       try {
-        const { page, errors } = await openPage(browser, base, name === "chromium");
+        const at = name === "webkit" ? "http://127.0.0.1:" + tokenPort + "/" : base;
+        const { page, errors } = await openPage(browser, at, name === "chromium");
         // A failed step ends the browser's journey: later steps build on its state.
         for (const [step, run] of steps) {
           try {
-            await run(page, base);
+            await run(page, at);
             if (errors.length) throw new Error("Console errors: " + errors.splice(0).join(" | "));
             checks.push({ browser: name, step, ok: true });
             log("pass", { browser: name, step: JSON.stringify(step) });
@@ -308,7 +356,9 @@ async function run() {
       }
     }
     // RPC and MCP against the same built app: the MCP client connects from what `make mcp-config` writes for it.
-    await writeFile(join(work, "mcp.env"), "PORT=" + port + "\n");
+    // An agent's key for RPC and MCP, as `make apikey` prints it and `make mcp-config` reads it from .env.
+    const agentKey = admin(root, appEnv, ["apikey", "e2e"]).key;
+    await writeFile(join(work, "mcp.env"), "PORT=" + port + "\nAGENT_API_KEY=" + agentKey + "\n");
     const written = await promisify(execFile)("make", ["-s", "mcp-config", "MCP_ENV=" + join(work, "mcp.env"), "MCP_OUT=" + join(work, "mcp.json")], { cwd: root });
     log("mcp-config", { written: written.stdout.trim() });
     for (const [step, error] of await checkApi(base.slice(0, -1), join(work, "mcp.json"))) {
@@ -316,7 +366,7 @@ async function run() {
       log(error ? "FAIL" : "pass", { browser: "rpc+mcp", step: JSON.stringify(step), ...(error ? { error: JSON.stringify(error) } : {}) });
     }
     // The deep suite in a workspace of its own, on a second instance of the built app against the same backplane.
-    for (const r of await runDeep({ root, work: join(work, "deep"), backplane: { port: backplanePort, apiKey } })) {
+    for (const r of await runDeep({ root, work: join(work, "deep"), backplane: { port: backplanePort, apiKey: botKey } })) {
       checks.push({ browser: "deep " + r.via, step: r.step, ok: r.ok, ...(r.error ? { error: r.error } : {}) });
       log(r.ok ? "pass" : "FAIL", { browser: "deep " + r.via, step: JSON.stringify(r.step), ms: r.ms, ...(r.error ? { error: JSON.stringify(r.error.slice(0, 400)) } : {}) });
     }

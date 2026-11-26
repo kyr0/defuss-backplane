@@ -1,5 +1,6 @@
 /** VERIFIED: the workspace's documents besides issues and cycles, one backplane db bucket each (tests/workspace.test.ts). */
-export type Person = { id: string; name: string };
+/** `subject` is the backplane auth subject who signs in as this person; a person without one cannot sign in. */
+export type Person = { id: string; name: string; subject?: string };
 export type Team = { id: string; name: string; next: number };
 export type Project = {
   id: string;

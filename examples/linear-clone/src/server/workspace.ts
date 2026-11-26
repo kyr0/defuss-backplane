@@ -179,9 +179,44 @@ export async function openWorkspace(options: {
 
   const log = createLog(client.logs());
 
+  /** Links a person to an auth subject, creating the person with `name` when the ID is new. */
+  async function link(person: string, subject: string, name: string) {
+    if (typeof person !== "string" || !/^[a-z0-9][a-z0-9-]{0,47}$/.test(person))
+      throw new InvalidInput("person", "A person ID has 1 to 48 lowercase letters, digits and -");
+    if ((await people.get(person)) === null) await people.insert({ id: person, name, subject });
+    else await people.update(person, { subject });
+  }
+
   return {
     log,
     today,
+    /** Sign-in, agent keys and callback checks of this workspace's tenant, through the backplane, and the person each
+     * signed-in subject acts as. */
+    members: {
+      configure: client.auth.configure,
+      /** The defuss-serve plugin that forwards the browser's /auth/* to the backplane. */
+      proxy: client.auth.proxy,
+      authenticate: (authorization: string) => tenant.auth.authenticate(authorization),
+      verifyCallback: client.callbacks.verify,
+      async personOf(subject: string) {
+        return (await people.query({ filters: where("subject", subject), limit: 1 })).rows[0] ?? null;
+      },
+      /** Gives a person a sign-in: the account is created when the email is new; the password applies to a new
+       * account only. */
+      async add(input: { email: string; password: string; person: string; name?: string }) {
+        const member = await tenant.auth.addMember({ email: input.email, password: input.password });
+        await link(input.person, member.subjectId, input.name ?? input.person);
+        return { person: input.person, subjectId: member.subjectId, created: member.created };
+      },
+      /** An agent's API key, acting as a person of its own (`agent-<name>` unless `person` is given). The key is
+       * returned once. */
+      async addAgent(input: { name: string; person?: string }) {
+        const person = input.person ?? "agent-" + input.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+        const key = await tenant.auth.createApiKey({ name: input.name });
+        await link(person, key.subjectId, input.name);
+        return { person, id: key.id, key: key.key, expiresAt: key.expiresAt };
+      },
+    },
     /** People, teams, projects and cycles, for the browser's first render. */
     async directory() {
       const [p, t, pr, c] = await Promise.all([all(people), all(teams), all(projects), all(cycles)]);

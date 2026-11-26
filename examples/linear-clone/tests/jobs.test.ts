@@ -10,6 +10,8 @@ import type { Api } from "../src/server/api.ts";
 import { loadConfig } from "../src/server/config.ts";
 import { schedules, upsertSchedules } from "../src/server/jobs.ts";
 import { type Server, startServer } from "../src/server/server.ts";
+import { createJobs } from "../src/server/jobs.ts";
+import { signIn } from "./helpers/auth.ts";
 import { type Daemon, freePort, startDaemon } from "./helpers/daemon.ts";
 
 const seed: Seed = await Bun.file(new URL("../input/seed.json", import.meta.url)).json();
@@ -31,8 +33,9 @@ async function start(workspace: string, env: Record<string, string> = {}) {
   servers.push(server);
   return server;
 }
-const clients = async (server: Server, authorization?: string) =>
-  createRpcContext({ baseUrl: server.url, headers: authorization ? { Authorization: authorization } : {} }).getRpcClient<Api>();
+const clients = async (server: Server, headers: Record<string, string> = {}) =>
+  createRpcContext({ baseUrl: server.url, headers }).getRpcClient<Api>();
+const status = (call: Promise<unknown>) => call.then(() => 200, (e: { status: number }) => e.status);
 
 beforeAll(async () => {
   daemon = await startDaemon();
@@ -44,29 +47,35 @@ afterAll(async () => {
   await rm(publicDir, { recursive: true, force: true });
 });
 
-test("Jobs answer only the bot key, and MCP does not list them", async () => {
+test("Jobs answer only a live callback token, and MCP does not list them", async () => {
   const server = await start("guard");
-  const anonymous = await clients(server);
-  expect(await anonymous.Jobs.dueDigest().catch((e: { status: number }) => e.status)).toBe(403);
-  expect(await (await clients(server, "Bearer wrong")).Jobs.dueDigest().catch((e: { status: number }) => e.status)).toBe(403);
-  const backplane = await clients(server, "Bearer " + daemon.apiKey);
-  // VERIFIED: in the seed, ENG-140 (Sophie) is due on 2026-10-03 and ENG-142 (Aron) on 2026-10-04.
-  expect(await backplane.Jobs.dueDigest()).toEqual({ date: "2026-10-03", items: 1, added: 1 });
-  expect(await backplane.Jobs.dueDigest()).toEqual({ date: "2026-10-03", items: 1, added: 0 });
+  const { authorization } = await signIn(server, { email: "aron@guard.example", person: "aron", workspace: "guard" });
+  expect(await status((await clients(server)).Jobs.dueDigest())).toBe(401);
+  // A signed-in person, the app's bot key and a made-up token are all no callback.
+  expect(await status((await clients(server, { Authorization: authorization })).Jobs.dueDigest())).toBe(403);
+  expect(await status((await clients(server, { Authorization: "ApiKey " + daemon.apiKey })).Jobs.dueDigest())).toBe(401);
+  expect(await status((await clients(server, { "X-Backplane-Callback": "made-up" })).Jobs.dueDigest())).toBe(403);
+  // The jobs themselves. VERIFIED: in the seed, ENG-140 (Sophie) is due on 2026-10-03 and ENG-142 (Aron) on 2026-10-04.
+  const jobs = createJobs(server.ws);
+  expect(await jobs.dueDigest()).toEqual({ date: "2026-10-03", items: 1, added: 1 });
+  expect(await jobs.dueDigest()).toEqual({ date: "2026-10-03", items: 1, added: 0 });
   const agent = new Client({ name: "test", version: "1" });
-  await agent.connect(new StreamableHTTPClientTransport(new URL(server.url + "/mcp")));
+  await agent.connect(
+    new StreamableHTTPClientTransport(new URL(server.url + "/mcp"), { requestInit: { headers: { Authorization: authorization } } }),
+  );
   expect((await agent.listTools()).tools.some((t) => t.name.startsWith("Jobs."))).toBe(false);
   await agent.close();
 });
 
 test("the rollover closes the ended cycle, carries its open issues and opens the next, once", async () => {
   const server = await start("rollover");
-  const backplane = await clients(server, "Bearer " + daemon.apiKey);
+  const jobs = createJobs(server.ws);
+  const { authorization } = await signIn(server, { email: "aron@rollover.example", person: "aron", workspace: "rollover" });
   clock = new Date("2026-10-13T08:00:00Z");
   try {
-    expect(await backplane.Jobs.cycleRollover()).toEqual({ closed: ["eng-24"], opened: ["eng-25"] });
-    expect(await backplane.Jobs.cycleRollover()).toEqual({ closed: [], opened: [] });
-    const rpc = await clients(server);
+    expect(await jobs.cycleRollover()).toEqual({ closed: ["eng-24"], opened: ["eng-25"] });
+    expect(await jobs.cycleRollover()).toEqual({ closed: [], opened: [] });
+    const rpc = await clients(server, { Authorization: authorization });
     const { cycles } = await rpc.Workspace.bootstrap();
     expect(cycles.map((c) => [c.id, c.closed, c.start, c.end])).toEqual([
       ["eng-24", true, "2026-09-28", "2026-10-11"],

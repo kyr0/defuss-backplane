@@ -1,6 +1,6 @@
 /** VERIFIED: tests/api.test.ts calls every method once through the defuss-rpc client and the MCP bridge. The public RPC
- * API of the tracker: the browser imports `type Api` only, so the compiler checks both sides of every call. Without
- * user auth every write acts as the configured viewer. */
+ * API of the tracker: the browser imports `type Api` only, so the compiler checks both sides of every call. Every
+ * write acts as the signed-in person, whom `viewer()` names (identity.ts). */
 import { BackplaneError } from "defuss-backplane/client";
 import { type Fault, faultMessage } from "../core/faults.ts";
 import { parseIssueId } from "../core/ids.ts";
@@ -10,7 +10,7 @@ import { createJobs } from "./jobs.ts";
 import type { Log } from "./log.ts";
 import { NotFound, type Workspace } from "./workspace.ts";
 
-export type ApiContext = { ws: Workspace; viewer: string; workspace: string; timeZone: string; log: Log };
+export type ApiContext = { ws: Workspace; viewer: () => string; workspace: string; timeZone: string; log: Log };
 
 /** The fault of an error a method threw; a backplane that cannot be reached is UNAVAILABLE. */
 export function faultOf(error: unknown): Fault {
@@ -68,7 +68,7 @@ export function createApi({ ws, viewer, workspace, timeZone, log }: ApiContext) 
     Workspace: {
       /** People, teams, projects and cycles, the viewer and today's date: everything the first render needs. */
       async bootstrap() {
-        return { workspace, viewer, timeZone, today: ws.today(), ...(await ws.directory()) };
+        return { workspace, viewer: viewer(), timeZone, today: ws.today(), ...(await ws.directory()) };
       },
     },
     Issues: {
@@ -85,23 +85,23 @@ export function createApi({ ws, viewer, workspace, timeZone, log }: ApiContext) 
         ]);
         return { ...current, comments, events, attachments };
       },
-      create: (draft: Partial<Fields>) => ws.issues.create(draft, viewer),
+      create: (draft: Partial<Fields>) => ws.issues.create(draft, viewer()),
       /** With `ifRevision`, fails with REVISION_CONFLICT when someone changed the issue since that revision. */
       update: (id: string, patch: Partial<Fields>, ifRevision?: string) =>
-        ws.issues.update(issueRef(id), patch, viewer, ifRevision),
+        ws.issues.update(issueRef(id), patch, viewer(), ifRevision),
       async remove(id: string, ifRevision?: string) {
-        await ws.issues.remove(issueRef(id), viewer, ifRevision);
+        await ws.issues.remove(issueRef(id), viewer(), ifRevision);
         return true;
       },
-      comment: (id: string, body: string) => ws.comments.add(issueRef(id), viewer, body),
+      comment: (id: string, body: string) => ws.comments.add(issueRef(id), viewer(), body),
       attachments: (id: string) => ws.attachments.list(issueRef(id)),
       removeAttachment: (id: string, name: string) => ws.attachments.remove(issueRef(id), name),
     },
     Inbox: {
       /** The viewer's items, newest first. */
-      list: () => ws.inbox.list(viewer),
+      list: () => ws.inbox.list(viewer()),
       /** Marks the viewer's items read, or only `ids`; returns how many changed. */
-      markRead: (ids?: string[]) => ws.inbox.markRead(viewer, itemIds(ids)),
+      markRead: (ids?: string[]) => ws.inbox.markRead(viewer(), itemIds(ids)),
     },
     Cycles: {
       /** The running cycle with its statistics, or null when the team has none. */

@@ -10,6 +10,7 @@ import type { Api } from "../src/server/api.ts";
 import { loadConfig } from "../src/server/config.ts";
 import { uploadIdOf } from "../src/core/ids.ts";
 import { MAX_ATTACHMENT_BYTES, type Server, startServer } from "../src/server/server.ts";
+import { signIn } from "./helpers/auth.ts";
 import { type Daemon, freePort, startDaemon } from "./helpers/daemon.ts";
 
 const seed: Seed = await Bun.file(new URL("../input/seed.json", import.meta.url)).json();
@@ -18,6 +19,8 @@ let server: Server;
 let publicDir: string;
 let rpc: Api;
 let ctx: ReturnType<typeof createRpcContext>;
+/** Aron's sign-in, which every call of these tests sends. */
+let auth: { Authorization: string };
 
 /** The fault a failed call carries: its HTTP status and the code in its body. */
 const fault = (call: Promise<unknown>) =>
@@ -40,7 +43,8 @@ beforeAll(async () => {
     TIME_ZONE: "Europe/Berlin",
   });
   server = await startServer(config, { publicDir, seed, now: () => new Date("2026-10-03T12:00:00Z") });
-  ctx = createRpcContext({ baseUrl: server.url });
+  auth = { Authorization: (await signIn(server, { email: "aron@example.com", person: "aron" })).authorization };
+  ctx = createRpcContext({ baseUrl: server.url, headers: auth });
   rpc = await ctx.getRpcClient<Api>();
 });
 afterAll(async () => {
@@ -109,13 +113,13 @@ describe("attachments", () => {
     });
     expect(uploaded.result).toMatchObject({ name: "trace.bin", size: bytes.length });
     expect((await rpc.Issues.attachments("ENG-141")).map((a) => a.name)).toEqual(["trace.bin"]);
-    const file = await ctx.download("attachment", undefined, { downloadId: "ENG-141/trace.bin" });
+    const file = await ctx.download("attachment", undefined, { downloadId: "ENG-141/trace.bin", headers: auth });
     expect(new Uint8Array(file.data as unknown as ArrayBuffer)).toEqual(bytes);
     expect(file.filename).toBe("trace.bin");
     expect(await rpc.Issues.removeAttachment("ENG-141", "trace.bin")).toBe(true);
-    expect(await fault(ctx.download("attachment", undefined, { downloadId: "ENG-141/trace.bin" }))).toMatch(/^404 /);
-    expect(await fault(ctx.download("attachment", undefined, { downloadId: "no-slash" }))).toMatch(/^404 /);
-    expect(await fault(ctx.download("attachment", undefined, { downloadId: "ENG-141/../x" }))).toMatch(/^404 /);
+    expect(await fault(ctx.download("attachment", undefined, { downloadId: "ENG-141/trace.bin", headers: auth }))).toMatch(/^404 /);
+    expect(await fault(ctx.download("attachment", undefined, { downloadId: "no-slash", headers: auth }))).toMatch(/^404 /);
+    expect(await fault(ctx.download("attachment", undefined, { downloadId: "ENG-141/../x", headers: auth }))).toMatch(/^404 /);
   });
 
   test("uploads to a missing issue, with a bad name or above the limit are refused before their bytes arrive", async () => {
@@ -131,7 +135,7 @@ describe("attachments", () => {
 describe("MCP and HTTP", () => {
   test("the API is a set of MCP tools whose calls run through the same RPC functions", async () => {
     const agent = new Client({ name: "test", version: "1" });
-    await agent.connect(new StreamableHTTPClientTransport(new URL(server.url + "/mcp")));
+    await agent.connect(new StreamableHTTPClientTransport(new URL(server.url + "/mcp"), { requestInit: { headers: auth } }));
     const names = (await agent.listTools()).tools.map((t) => t.name);
     expect(names).toContain("Issues.list");
     expect(names).toContain("Workspace.bootstrap");

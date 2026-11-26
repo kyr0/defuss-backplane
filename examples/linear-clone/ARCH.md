@@ -8,10 +8,11 @@ The app is one Bun process. The browser and MCP clients call it; it calls the ba
 
 ```mermaid
 flowchart LR
-  B[Browser] -- "/ and /rpc" --> A[linear-clone<br/>defuss-serve on 127.0.0.1]
-  M[MCP client] -- "/mcp" --> A
-  A -- "defuss-rpc with the bot key" --> P[defuss-backplane<br/>db, cache, vfs, logs, scheduler]
-  P -- "_rpc callback: Jobs.dueDigest, Jobs.cycleRollover" --> A
+  B[Browser] -- "/, /auth and /rpc with the access token" --> A[linear-clone<br/>defuss-serve on 127.0.0.1]
+  M[MCP client] -- "/mcp with an agent's API key" --> A
+  A -- "defuss-rpc with the app's bot key; auth.authenticate per call" --> P[defuss-backplane<br/>db, cache, vfs, logs, scheduler, auth]
+  A -- "/auth/* proxied to /apps/linear-clone/auth/*" --> P
+  P -- "_rpc callback with a one-time token: Jobs.dueDigest, Jobs.cycleRollover" --> A
 ```
 
 | Module | Job |
@@ -19,7 +20,9 @@ flowchart LR
 | `src/core` | Pure rules: validation, patches, ordering, IDs, cycle statistics, the due digest and the rollover plan. No I/O, so tests feed it plain values. |
 | `src/server/workspace.ts` | The only module that talks to the backplane. It maps the workspace onto buckets, the cache, files, logs and the scheduler queue. |
 | `src/server/api.ts` | The RPC namespaces, and the translation of failures into coded faults. |
-| `src/server/jobs.ts` | The two scheduled jobs, their schedules and the bot-key guard. |
+| `src/server/jobs.ts` | The two scheduled jobs, their schedules and the guard that admits only the backplane's callbacks. |
+| `src/server/identity.ts` | Who sent a call: the backplane's `auth.authenticate`, the person the subject links to, and the call run as that person. |
+| `src/server/admin.ts` | `make member` and `make apikey`. |
 | `src/server/server.ts`, `cli.ts` | The listener, uploads and downloads, MCP, startup checks and shutdown. |
 | `src/web` | The frontend: a store, actions, and views as JSX components. |
 
@@ -38,6 +41,10 @@ The app runs no timer. At startup it creates or updates two schedules in the bac
 - The due digest adds an inbox item for the assignee of each open issue that is due today or overdue, once per issue and day.
 - The rollover closes a cycle that ended, opens the next one and moves its unfinished issues there, at most 52 cycles per call.
 
+## Why the backplane signs people in
+
+The app keeps no accounts: the backplane hosts one auth authority per app, and the app forwards its `/auth` routes there with `ws.members.proxy()`. The alternative, an authority inside the app, would put a second store, signing keys and their rotation into every app, while the backplane already keeps the app's other state. Each person in the workspace links to at most one auth subject, so an issue's actor stays a workspace person and not an account ID. `make member` and `make apikey` create accounts because the app sends no email.
+
 ## Why the frontend morphs
 
 The frontend starts from the [defuss-shadcn](https://github.com/kyr0/defuss-shadcn) issue tracker scaffold: its markup, styles and component bundle. The scaffold's rows, cards, issue page, notes and table rows became JSX components compiled for [defuss-morph](https://github.com/kyr0/defuss-morph). Each rendered region is a `reactive()` binding to one store, keyed by issue ID. After an action, every region renders again, and [defuss-morph](https://github.com/kyr0/defuss-morph) changes only the nodes that differ.
@@ -51,14 +58,17 @@ Lucide icons are imported one by one and rendered as SVG by the same components.
 ## Security
 
 - Both listeners stay on 127.0.0.1, and [defuss-serve](https://github.com/kyr0/defuss-serve) rejects a foreign `Host` header on every route.
-- There is no user authentication yet. Anyone who can reach the port acts as `VIEWER`. Put an authenticating proxy in front before you expose it.
-- The bot key never reaches the browser. `Jobs` checks it in constant time and answers 403 without it, and MCP does not list `Jobs`.
+- Every call but the backplane's callbacks needs a sign-in: a person's access token from `/auth`, or an agent's API key. The app asks the backplane's `auth.authenticate` on each call, in the workspace's tenant, so a removed member or a revoked key fails on the next call, and a token of another workspace fails always. VERIFIED by tests/auth.test.ts. Why not check the JWT against the JWKS locally: that would accept a revoked token until it expires, and cannot check an API key at all.
+- A signed-in account acts as the workspace person whose `subject` it is, and an account no person links to gets 403. Writes record that person as their actor.
+- The app holds its own bot key, which reaches only this app in the backplane, never the root key. The key never reaches the browser.
+- `Jobs` admits only a callback whose `X-Backplane-Callback` token the backplane's `callbacks.verify` confirms for this app and workspace, while the call runs. A signed-in person cannot call it, and MCP does not list it.
+- The browser talks to its own origin only: `/auth/*` is forwarded to the backplane with the app's key, so the refresh cookie stays on the app's origin and the page needs no CORS. Sign-in writes need the `PUBLIC_ORIGIN` and the CSRF field defuss-auth checks.
 - Uploads are checked before the first byte arrives: the issue must exist, the file name must be valid and the announced size must be at most 25 MiB, else the server answers 403.
 - VERIFIED: MCP answers 403 to every request with an `Origin` header ([defuss-mcp](https://github.com/kyr0/defuss-mcp)'s check with `allowedOrigins: []`), so a web page cannot drive the tools through a visitor's browser.
 
 ## Privacy
 
-The workspace holds names of people, issue texts, comments and attachments, all in the backplane's data root. The audit log records who created, changed, moved or deleted an issue, with the issue ID, the changed field names and, for a move, the old and new status; it records no other field values. The app's log lines carry method names and error messages, not request bodies, and never the bot key. Deleting a workspace means deleting its backplane tenant.
+The workspace holds names of people, issue texts, comments and attachments, all in the backplane's data root. The backplane's auth store for the app holds each member's email address, a password hash and their sessions. The audit log records who created, changed, moved or deleted an issue, with the issue ID, the changed field names and, for a move, the old and new status; it records no other field values. The app's log lines carry method names and error messages, not request bodies, and never the bot key. Deleting a workspace means deleting its backplane tenant.
 
 ## Operations
 

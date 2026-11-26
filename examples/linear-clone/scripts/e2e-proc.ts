@@ -1,6 +1,7 @@
 /** VERIFIED: scripts/e2e.ts and scripts/deep-live.ts start their processes with these. Child processes for the
  * end-to-end runs: a free loopback port, a start that waits for a ready line, and a stop by SIGTERM. */
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
+import { join } from "node:path";
 import { createServer } from "node:net";
 
 export async function freePort() {
@@ -38,3 +39,17 @@ export const stop = (child: ChildProcess) =>
     child.once("exit", () => done());
     child.kill("SIGTERM");
   });
+
+/** Runs `make member` or `make apikey`'s command, `src/server/admin.ts`, with the instance's settings and `input` on
+ * stdin, and returns its JSON line; a failure throws with that line. */
+export function admin(root: string, env: Record<string, string>, args: string[], input = "") {
+  const r = spawnSync("bun", [join(root, "src/server/admin.ts"), ...args], {
+    cwd: root,
+    env: { PATH: process.env.PATH ?? "", ...env },
+    input,
+    encoding: "utf8",
+  });
+  const out = JSON.parse(r.stdout.trim() || "{}") as { ok?: boolean; key?: string; error?: string };
+  if (r.status !== 0 || !out.ok) throw new Error("admin.ts " + args[0] + " failed: " + (r.stdout || r.stderr));
+  return out;
+}

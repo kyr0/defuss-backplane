@@ -1,13 +1,14 @@
 /** VERIFIED: tests/jobs.test.ts against a real daemon. The app runs no timer of its own: the backplane's scheduler calls
- * `Jobs.dueDigest` and `Jobs.cycleRollover` over RPC (handler `_rpc`), with the bot key. Why the backplane's scheduler:
- * schedules, retries and run history survive the app's restarts, and agents can inspect them over MCP. */
-import { timingSafeEqual } from "node:crypto";
+ * `Jobs.dueDigest` and `Jobs.cycleRollover` over RPC (handler `_rpc`), with a one-time token the app checks with the
+ * backplane. Why the backplane's scheduler: schedules, retries and run history survive the app's restarts, and agents
+ * can inspect them over MCP. */
 import { rpcCalls } from "defuss-rpc/client";
 import { dueDigest } from "../core/digest.ts";
 import type { Notification } from "../core/model.ts";
 import { planRollover } from "../core/rollover.ts";
 import type { Api } from "./api.ts";
-import type { Workspace } from "./workspace.ts";
+import { currentViewer } from "./identity.ts";
+import { APP, type Workspace } from "./workspace.ts";
 
 /** The actor of changes the jobs make. */
 export const SYSTEM = "system";
@@ -76,13 +77,19 @@ export async function upsertSchedules(queue: Queue, rpcUrl: string, timeZone: st
   return outcome;
 }
 
-/** A guard that admits a `Jobs` call only with the bot key, compared in constant time. */
-export function jobsGuard(apiKey: string) {
-  const expected = Buffer.from("Bearer " + apiKey);
-  return (namespace: string, _method: string, _args: unknown[], request?: Request) => {
-    if (namespace !== "Jobs") return true;
-    const given = Buffer.from(request?.headers.get("authorization") ?? "");
-    return given.length === expected.length && timingSafeEqual(given, expected);
+/** Lets the backplane's callbacks, and only them, call `Jobs`, and everything else only a signed-in call. A callback
+ * carries `X-Backplane-Callback`, a token that `callbacks.verify` accepts for this app's workspace while the call runs.
+ * Why the token and not a key: the daemon sends no key to apps, and the app's own bot key stays with the app. */
+export function jobsGuard(ws: Workspace, workspace: string) {
+  return async (namespace: string, _method: string, _args: unknown[], request?: Request) => {
+    if (namespace !== "Jobs") return currentViewer() !== undefined;
+    if (currentViewer()) return false;
+    try {
+      const call = await ws.members.verifyCallback(request?.headers.get("x-backplane-callback") ?? "");
+      return call.app === APP && call.tenant === workspace;
+    } catch {
+      return false;
+    }
   };
 }
 

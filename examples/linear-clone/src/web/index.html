@@ -10,6 +10,15 @@
 <link rel="stylesheet" href="tracker.css" />
 </head>
 <body>
+<main class="pm-signin" data-pm-signin="" hidden>
+  <form class="pm-signin-card" data-pm-signin-form="">
+    <h1>Sign in to Vector</h1>
+    <label>Email <input class="input" name="email" type="email" autocomplete="username" required></label>
+    <label>Password <input class="input" name="password" type="password" autocomplete="current-password" required></label>
+    <p class="pm-signin-error" data-pm-signin-error="" role="alert" hidden></p>
+    <button class="btn" type="submit">Sign in</button>
+  </form>
+</main>
 <div class="pm" data-pm="" data-i18n-component="">
   <aside class="app-sidebar pm-sidebar" id="pm-sidebar" data-state="expanded" aria-label="Main navigation" data-i18n-aria-label-en="Main navigation" data-i18n-aria-label-de="Hauptnavigation">
     <div class="sidebar-header pm-sb-head">
@@ -23,7 +32,7 @@
         <button role="menuitem" class="dropdown-item" tabindex="-1" data-toast="Invitation link copied"><i data-lucide="user-plus"></i> <span data-i18n-target="ws-invite">Invite people</span></button>
         <button role="menuitem" class="dropdown-item" tabindex="-1" data-pm-theme=""><i data-lucide="moon"></i> <span data-i18n-target="theme-1">Toggle theme</span></button>
         <div class="dropdown-separator" role="separator"></div>
-        <button role="menuitem" class="dropdown-item" tabindex="-1" data-toast="Signed out" data-toast-desc="This is a clickdummy - you are still here."><i data-lucide="log-out"></i> <span data-i18n-target="ws-logout">Log out</span></button>
+        <button role="menuitem" class="dropdown-item" tabindex="-1" data-pm-signout=""><i data-lucide="log-out"></i> <span data-i18n-target="ws-logout">Log out</span></button>
       </div>
       <span class="pm-sb-actions">
         <button class="btn" data-variant="ghost" data-size="icon-sm" type="button" data-command-trigger="pm-cmd" aria-label="Search (⌘K)" data-i18n-aria-label-en="Search (⌘K)" data-i18n-aria-label-de="Suchen (⌘K)"><i data-lucide="search"></i></button>

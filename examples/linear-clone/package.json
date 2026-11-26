@@ -13,6 +13,7 @@
     "test": "bun test ./tests"
   },
   "dependencies": {
+    "defuss-auth": "0.2.0",
     "defuss-backplane": "file:./deps/defuss-backplane",
     "defuss-dom-router": "0.1.1",
     "defuss-i18n": "0.2.0",
@@ -21,7 +22,7 @@
     "defuss-morph": "0.3.1",
     "defuss-query": "0.2.1",
     "defuss-rpc": "4.5.0",
-    "defuss-serve": "0.4.0",
+    "defuss-serve": "0.5.0",
     "defuss-shadcn": "0.10.2",
     "lucide": "1.79.0"
   },

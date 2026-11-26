@@ -9,7 +9,7 @@ import { cp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { type Backplane, DEEP_TENANT, type DeepResult, deepCheck, wipeWorkspace } from "./deep.ts";
-import { freePort, launch, stop } from "./e2e-proc.ts";
+import { admin, freePort, launch, stop } from "./e2e-proc.ts";
 
 export async function runDeep({ root, work, backplane }: { root: string; work: string; backplane: Backplane }): Promise<DeepResult[]> {
   const app = join(work, "app");
@@ -29,23 +29,19 @@ export async function runDeep({ root, work, backplane }: { root: string; work: s
   await timed("the workspace is wiped before the run", () => wipeWorkspace(backplane, DEEP_TENANT, false));
   const port = await freePort();
   const viewer = "aron";
-  const instance = await launch(
-    ["bun", "dist/server.js"],
-    app,
-    {
-      PORT: String(port),
-      BACKPLANE_PORT: String(backplane.port),
-      BACKPLANE_API_KEY: backplane.apiKey,
-      WORKSPACE: DEEP_TENANT,
-      VIEWER: viewer,
-      TIME_ZONE: "UTC",
-      DIGEST_CRON: "* * * * * *",
-      ROLLOVER_CRON: "* * * * * *",
-    },
-    / INFO listening /,
-  );
+  const env = {
+    BACKPLANE_PORT: String(backplane.port),
+    BACKPLANE_API_KEY: backplane.apiKey,
+    WORKSPACE: DEEP_TENANT,
+    TIME_ZONE: "UTC",
+    DIGEST_CRON: "* * * * * *",
+    ROLLOVER_CRON: "* * * * * *",
+  };
+  const instance = await launch(["bun", "dist/server.js"], app, { ...env, PORT: String(port) }, / INFO listening /);
   try {
-    await writeFile(join(work, "mcp.env"), "PORT=" + port + "\n");
+    // One agent key acting as Aron, for RPC and MCP alike, so both transports see the same viewer.
+    const { key } = admin(root, env, ["apikey", "deep", viewer]);
+    await writeFile(join(work, "mcp.env"), "PORT=" + port + "\nAGENT_API_KEY=" + key + "\n");
     await promisify(execFile)("make", ["-s", "mcp-config", "MCP_ENV=" + join(work, "mcp.env"), "MCP_OUT=" + join(work, "mcp.json")], { cwd: root });
     results.push(...(await deepCheck({ baseUrl: "http://127.0.0.1:" + port, mcpConfig: join(work, "mcp.json"), backplane, viewer })));
   } finally {

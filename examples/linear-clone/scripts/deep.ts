@@ -90,12 +90,16 @@ export async function wipeWorkspace(backplane: Backplane, tenant: string, schedu
 }
 
 export async function deepCheck(o: { baseUrl: string; mcpConfig: string; backplane: Backplane; viewer: string }): Promise<DeepResult[]> {
-  const { mcpServers } = JSON.parse(await readFile(o.mcpConfig, "utf8")) as { mcpServers: Record<string, { type: string; url: string }> };
+  const { mcpServers } = JSON.parse(await readFile(o.mcpConfig, "utf8")) as {
+    mcpServers: Record<string, { type: string; url: string; headers?: Record<string, string> }>;
+  };
   const entry = mcpServers["linear-clone"];
   assert.equal(entry?.type, "http", "the MCP config has an http entry for linear-clone");
+  // The agent's key from the MCP config signs both transports in as the same person.
+  const headers = entry.headers ?? {};
   const agent = new Client({ name: "deep", version: "1" });
-  await agent.connect(new StreamableHTTPClientTransport(new URL(entry.url)));
-  const ctx = createRpcContext({ baseUrl: o.baseUrl });
+  await agent.connect(new StreamableHTTPClientTransport(new URL(entry.url), { requestInit: { headers } }));
+  const ctx = createRpcContext({ baseUrl: o.baseUrl, headers });
   const client = (await ctx.getRpcClient<Api>()) as unknown as Record<string, Record<string, (...args: unknown[]) => Promise<Any>>>;
   const tenant = (await connectBackplane({ app: "linear-clone", ...o.backplane })).tenant(DEEP_TENANT);
   const used = { rpc: new Set<string>(), mcp: new Set<string>() };
@@ -121,7 +125,7 @@ export async function deepCheck(o: { baseUrl: string; mcpConfig: string; backpla
         throw rpcFault(e);
       });
   const download = (issue: string, name: string) =>
-    ctx.download("attachment", undefined, { downloadId: issue + "/" + name }).then(
+    ctx.download("attachment", undefined, { downloadId: issue + "/" + name, headers }).then(
       (file) => new Uint8Array(file.data as unknown as ArrayBuffer),
       (e: unknown) => {
         throw rpcFault(e);
@@ -387,7 +391,7 @@ export async function deepCheck(o: { baseUrl: string; mcpConfig: string; backpla
       for (const path of ["/readyz", "/health"])
         assert.deepEqual(await (await fetch(o.baseUrl + path)).json(), { service: "linear-clone", status: "pass", checks: [{ name: "backplane", status: "pass" }] });
     });
-    await step("MCP lists no Jobs tool, and a Jobs call without the bot key answers 403", async () => {
+    await step("MCP lists no Jobs tool, and a Jobs call without a callback token answers 403", async () => {
       assert.ok(!(await agent.listTools()).tools.some((t) => t.name.startsWith("Jobs.")));
       await rejects(rpc("Jobs.dueDigest"), 403);
       await rejects(rpc("Jobs.cycleRollover"), 403);
