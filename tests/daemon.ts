@@ -15,6 +15,7 @@ const names = [
   "BACKPLANE_DATA_DIR",
   "BACKPLANE_CALLBACK_ORIGINS",
   "BACKPLANE_OTLP",
+  "BACKPLANE_AUTH_MASTER_KEY",
   "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
 ];
 
@@ -43,6 +44,8 @@ export async function start(env: Record<string, string> = {}) {
   // Settings from the developer's shell must not switch push on or allow callback origins.
   delete process.env.BACKPLANE_OTLP;
   delete process.env.BACKPLANE_CALLBACK_ORIGINS;
+  // Auth stays off unless a test passes a master key.
+  delete process.env.BACKPLANE_AUTH_MASTER_KEY;
   Object.assign(process.env, {
     PORT: String(await freePort()),
     API_KEY: apiKey,

@@ -35,9 +35,11 @@ const consumerScripts = [
   "consumer-scheduler.ts",
   "consumer-mcp.ts",
   "consumer-equivalence.ts",
-  ...["run", "drivers", "kit", "cache", "db", "logs", "scheduler", "vfs", "http", "big", "video"].map((m) => `deep/${m}.ts`),
+  "consumer-auth.ts",
+  ...["run", "drivers", "kit", "auth", "cache", "db", "logs", "scheduler", "vfs", "http", "big", "video"].map((m) => `deep/${m}.ts`),
 ];
 const bot = randomBytes(32).toString("hex");
+const masterKey = randomBytes(32).toString("base64url");
 const listener = createServer();
 listener.listen(0, "127.0.0.1");
 await once(listener, "listening");
@@ -53,7 +55,7 @@ const env = {
   BACKPLANE_DATA_DIR: join(tmp, "data"),
 };
 const daemonEnv: NodeJS.ProcessEnv = { ...env };
-for (const k of ["API_KEY", "PORT", "BACKPLANE_DATA_DIR", "BACKPLANE_CALLBACK_ORIGINS"])
+for (const k of ["API_KEY", "PORT", "BACKPLANE_DATA_DIR", "BACKPLANE_CALLBACK_ORIGINS", "BACKPLANE_AUTH_MASTER_KEY"])
   delete daemonEnv[k];
 const observed: Record<string, unknown>[] = [];
 /** Matches the rejection of a promisified execFile that exited with `code` and printed `stderr`. */
@@ -108,7 +110,7 @@ async function runPhase(
     const modules: { moduleName: string }[] = JSON.parse(schema.stdout);
     assert.deepEqual(
       modules.map((item) => item.moduleName).sort(),
-      ["cache", "db", "logs", "scheduler", "vfs"],
+      ["auth", "bots", "cache", "callbacks", "db", "logs", "scheduler", "vfs"],
     );
     if (scheduling) {
       const { stdout } = await exec(peer, ["consumer-scheduler.ts", phase], {
@@ -232,6 +234,9 @@ async function runPhase(
     // Every MCP tool against its RPC method, through the client config that make mcp-config wrote.
     const twins = await exec(runtime, ["consumer-equivalence.ts", phase], { cwd: tmp, env, timeout: 30000 });
     observed.push({ daemon: runtime, ...JSON.parse(twins.stdout.trim()) });
+    // Auth and bot users through a defuss-serve proxy, on each daemon runtime.
+    const authed = await exec(peer, ["consumer-auth.ts", phase], { cwd: tmp, env, timeout: 60000 });
+    observed.push({ daemon: runtime, ...JSON.parse(authed.stdout.trim()) });
     // The deep suite once, against this Node.js daemon, whose pid bounds its memory during the 512 MiB transfer.
     if (phase === "node-first") {
       const deep = await exec(
@@ -295,6 +300,7 @@ try {
         "defuss-backplane": "file:" + tarball,
         "@modelcontextprotocol/client": "2.4.0",
         "playwright-core": "1.65.1",
+        "defuss-serve": "0.5.0",
       },
     }),
   );
@@ -347,7 +353,7 @@ try {
   );
   await writeFile(
     join(tmp, ".env"),
-    "API_KEY=" + bot + "\nPORT=" + port + "\nBACKPLANE_DATA_DIR=./data\n",
+    "API_KEY=" + bot + "\nPORT=" + port + "\nBACKPLANE_DATA_DIR=./data\nBACKPLANE_AUTH_MASTER_KEY=" + masterKey + "\n",
     { mode: 0o600 },
   );
   // The consumers connect to MCP from the file `make mcp-config` writes, with this daemon's .env as its input.

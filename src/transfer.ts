@@ -1,6 +1,7 @@
 /** VERIFIED: Both routes stream VFS objects over plain HTTP without the 1 MiB `/rpc` body limit. `/vfs/object` is the
  * typed client's upload and download endpoint. `/files/<app>/<tenant>/<bucket>/<key>` serves reads with ETags,
  * conditional requests and byte ranges, so curl, a proxy or a media player can fetch and seek. */
+import { allowApp } from "./access.js";
 import type { ErrorCode } from "./errors.js";
 import { capture, httpCode } from "./faults.js";
 import { contentType, decide, etag } from "./ranges.js";
@@ -70,6 +71,7 @@ export function createTransfers(services: ReturnType<typeof createServices>, rep
     } as Scope;
     const key = query.get("key") as string;
     try {
+      allowApp(scope.app);
       if (request.method === "PUT") {
         const stored = await transfers.upload(
           scope,
@@ -102,6 +104,7 @@ export function createTransfers(services: ReturnType<typeof createServices>, rep
       return fault(405, "GET or HEAD required", { Allow: "GET, HEAD" });
     try {
       const { scope, key } = address(request);
+      allowApp(scope.app);
       const head = await api.vfs.head(scope, key);
       if (!head.found) return fault(404, "No object at this key");
       let decision = decide(request.method, request.headers, head);

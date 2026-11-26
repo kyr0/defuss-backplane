@@ -61,7 +61,7 @@ export async function checkRevisions({
   for (const t of tools) {
     assert.equal(
       t.annotations?.readOnlyHint,
-      /\.(?:get|getVersioned|query|head|list|read|getRun|listRuns|scheduleHistory|runHistory)$/.test(t.name),
+      /\.(?:get|getVersioned|query|head|list|read|getRun|listRuns|scheduleHistory|runHistory|status|members|listApiKeys)$/.test(t.name),
     );
     assert.equal(
       t.annotations?.destructiveHint,

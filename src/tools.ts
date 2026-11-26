@@ -89,6 +89,8 @@ function decodeData(result: unknown, args: Record<string, unknown>) {
 interface Adapter {
   /** A scope schema other than app, tenant and bucket. */
   scope?: object;
+  /** The method takes no scope, such as `bots.list`. */
+  noScope?: true;
   /** Input fields the adapter consumes instead of forwarding. */
   fields?: Record<string, object>;
   input?(args: Record<string, unknown>): Record<string, unknown>;
@@ -107,7 +109,8 @@ const query = {
 };
 
 /** Each tool call goes to `rpc`, the daemon's own RPC server, so both protocols share one dispatcher and its faults.
- * The twelve scheduler tools manage schedules. Workers use RPC, so claim, renew, complete and fail have no tool. */
+ * The twelve scheduler tools manage schedules. Workers use RPC, so claim, renew, complete and fail have no tool. The
+ * four auth tools only read. */
 export function makeTools(rpc: Pick<RpcServer, "fetch">) {
   const compile = ajvValidator();
   const tools = createMcpApi(
@@ -137,7 +140,7 @@ export function makeTools(rpc: Pick<RpcServer, "fetch">) {
     adapter: Adapter = {},
   ) {
     const [namespace, method] = name.split(".");
-    const params = { scope: (adapter.scope ?? scope) as typeof scope, ...fields };
+    const params = adapter.noScope ? { ...fields } : { scope: (adapter.scope ?? scope) as typeof scope, ...fields };
     const keys = Object.keys(params);
     const read = [
       "get",
@@ -150,6 +153,9 @@ export function makeTools(rpc: Pick<RpcServer, "fetch">) {
       "scheduleHistory",
       "runHistory",
       "read",
+      "status",
+      "members",
+      "listApiKeys",
     ].includes(method);
     // Cache values, documents and log arguments can hold native values. VFS metadata and scheduler records are JSON,
     // so they need no DSON.
@@ -375,7 +381,56 @@ export function makeTools(rpc: Pick<RpcServer, "fetch">) {
   }, ["ifRevision"]);
   logTools(tool);
   schedulerTools(tool);
+  authTools(tool);
   return tools;
+}
+
+/** Read-only views of sign-in and keys, so an agent can debug why a login or a key fails. The writes stay RPC-only:
+ * a new key or password would land in the agent's transcript, and whoever holds the root key makes them over RPC. */
+function authTools(
+  tool: (name: string, description: string, fields: Record<string, object>, optional?: string[], adapter?: Adapter) => void,
+) {
+  const app = { type: "object", properties: { app: text }, required: ["app"], additionalProperties: false };
+  const tenant = {
+    type: "object",
+    properties: { app: text, tenant: text },
+    required: ["app", "tenant"],
+    additionalProperties: false,
+  };
+  tool(
+    "auth.status",
+    "Whether auth is on, and the app's sign-in registration: origin, mode, issuer and audience. It answers while auth is off.",
+    {},
+    [],
+    { scope: app },
+  );
+  tool(
+    "auth.members",
+    "Page through a tenant's members with email, status and claims, never a password. Pass next as page.after for the next page; a page can hold fewer than limit.",
+    {
+      page: {
+        type: "object",
+        properties: { limit: { type: "integer", minimum: 1, maximum: 500 }, after: text },
+        additionalProperties: false,
+      },
+    },
+    ["page"],
+    { scope: tenant },
+  );
+  tool(
+    "auth.listApiKeys",
+    "List the API keys of a tenant's agents: name, claims, expiry and revocation. A key's secret is never shown.",
+    {},
+    [],
+    { scope: tenant },
+  );
+  tool(
+    "bots.list",
+    "List the backplane's bot users with the apps they reach and their key's expiry, never the key. Needs the root key or an admin bot.",
+    {},
+    [],
+    { noScope: true },
+  );
 }
 
 /** Writes and reads an app's log, or one tenant's log of that app. JSON carries no dates, so timestamps travel as

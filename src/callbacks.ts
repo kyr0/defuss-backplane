@@ -3,12 +3,20 @@
  * scopes with due callbacks, so one dispatcher serves every app without claiming in idle scopes. The payload is the
  * callback's `url` plus a defuss-rpc call, as `rpcCalls` builds it; `parseRpcCall` reads it and `encodeRpcCall`
  * writes the request body. Why defuss-rpc's functions and not a body of our own: defuss-rpc owns its wire format, so
- * schedules stored today keep working when it changes. */
+ * schedules stored today keep working when it changes.
+ *
+ * Each call carries a one-time token in `X-Backplane-Callback` instead of a key. The app checks it with
+ * `callbacks.verify`, using its own bot key, while the call runs. Why not the daemon's root key: every app would then
+ * hold it. And why not the app's bot key: the daemon keeps only a digest of it. A token is valid
+ * only for the app of the schedule and only until its call ends, so nothing is stored and a token cannot be replayed. */
+import { randomBytes } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { DSON } from "defuss-dson";
 import { encodeRpcCall, parseRpcCall, type RpcCall } from "defuss-rpc/client";
 import type { Json, Queue, Run, Scheduler, Scope, WorkerPort } from "defuss-scheduler";
 import { PermanentFailure, startWorker } from "defuss-scheduler/worker";
+import { mayUseApp } from "./access.js";
+import { BackplaneError } from "./errors.js";
 import { reason } from "./log.js";
 
 /** The handler the daemon runs itself. Handler names starting with `_` belong to the daemon, like app names. */
@@ -26,9 +34,35 @@ const CONCURRENCY = 4;
 // every minute or more often keeps its worker.
 const IDLE_MS = 60_000;
 
+/** What `callbacks.verify` tells the app about the call that carries a token. */
+export type CallbackCall = { app: string; tenant: string; bucket: string; schedule: string; run: string; attempt: number };
+
+/** The tokens of the calls in flight. The RPC module and the dispatcher share one registry. */
+export function callbackTokens() {
+  const live = new Map<string, CallbackCall>();
+  return {
+    issue(call: CallbackCall) {
+      const token = randomBytes(32).toString("base64url");
+      live.set(token, call);
+      return token;
+    },
+    release: (token: string) => live.delete(token),
+    api: {
+      /** The call a token belongs to, while it runs and only for a caller that may use its app. Another app's token
+       * answers like an unknown one, so a bot cannot probe other apps' calls. */
+      async verify(token: string): Promise<CallbackCall> {
+        const call = typeof token === "string" ? live.get(token) : undefined;
+        if (!call || !mayUseApp(call.app)) throw new BackplaneError("NOT_FOUND", "No callback in flight with this token");
+        return call;
+      },
+    },
+  };
+}
+export type CallbackTokens = ReturnType<typeof callbackTokens>;
+
 /** Checks a callback payload. A TypeError becomes INVALID_ARGUMENT when a schedule is created or changed. Only
- * loopback and the operator's origins are allowed, because any bot-key holder can create schedules and the daemon
- * sends the bot key with each call. */
+ * loopback and the operator's origins are allowed, because any holder of a key for the app can create schedules, and
+ * the daemon would otherwise call any address on its behalf. */
 export function callback(payload: unknown, origins: ReadonlySet<string>): RpcCallback {
   const p = payload as Record<string, unknown> | null;
   if (
@@ -73,7 +107,7 @@ async function bounded(response: Response) {
 export function startCallbacks(
   scheduler: Scheduler,
   options: {
-    apiKey: string;
+    tokens: CallbackTokens;
     origins: ReadonlySet<string>;
     warn: (message: string) => void;
     record: (app: string, outcome: "ok" | "failed" | "rejected", seconds: number) => void;
@@ -84,7 +118,7 @@ export function startCallbacks(
   const workers = new Map<string, { worker: ReturnType<typeof startWorker>; seen: number; running: number }>();
 
   /** One call. A 4xx answer other than 408 and 429 fails the run for good: the same request fails again. */
-  async function call(run: Run, signal: AbortSignal): Promise<Json> {
+  async function call(scope: Scope, run: Run, signal: AbortSignal): Promise<Json> {
     let target: RpcCallback;
     try {
       target = callback(run.payload, options.origins);
@@ -92,13 +126,34 @@ export function startCallbacks(
       throw new PermanentFailure(reason(error));
     }
     const request = encodeRpcCall(target.call);
+    const token = options.tokens.issue({
+      app: scope.app,
+      tenant: scope.tenant,
+      bucket: scope.bucket,
+      schedule: run.scheduleId,
+      run: run.id,
+      attempt: run.attempt,
+    });
+    try {
+      return await send(target, request, token, run, signal);
+    } finally {
+      options.tokens.release(token);
+    }
+  }
+  async function send(
+    target: RpcCallback,
+    request: ReturnType<typeof encodeRpcCall>,
+    token: string,
+    run: Run,
+    signal: AbortSignal,
+  ): Promise<Json> {
     const response = await fetch(target.url, {
       method: request.method,
       redirect: "error",
       signal: AbortSignal.any([signal, AbortSignal.timeout(TIMEOUT_MS)]),
       headers: {
         ...request.headers,
-        authorization: "Bearer " + options.apiKey,
+        "x-backplane-callback": token,
         // Delivery is at least once: the app drops a repeated run ID.
         "x-backplane-schedule": run.scheduleId,
         "x-backplane-run": run.id,
@@ -155,7 +210,7 @@ export function startCallbacks(
             entry.running++;
             let outcome: "ok" | "failed" | "rejected" = "ok";
             try {
-              return await call(run, context.signal);
+              return await call(scope, run, context.signal);
             } catch (error) {
               outcome = error instanceof PermanentFailure ? "rejected" : "failed";
               options.warn(

@@ -15,10 +15,11 @@ import { cacheScenario } from "./cache.ts";
 import { dbScenario } from "./db.ts";
 import { httpScenario } from "./http.ts";
 import { logsScenario } from "./logs.ts";
+import { authScenario } from "./auth.ts";
 import { schedulerScenario } from "./scheduler.ts";
 import { videoScenario } from "./video.ts";
 import { vfsScenario } from "./vfs.ts";
-import { mcpOps, rpcOps, schemaPaths, used } from "./drivers.ts";
+import { mcpOps, mcpTool, recorded, rpcOps, schemaPaths, used } from "./drivers.ts";
 import { context, type Ctx, results } from "./kit.ts";
 
 const { values: flags } = parseArgs({
@@ -47,24 +48,33 @@ const client = await connectBackplane({ app: flags.app });
 const rpc = rpcOps(client, flags.tenant);
 const own = { rpc: rpcOps(await connectBackplane({ app: "_backplane" }), flags.tenant), mcp: mcpOps(agent, "_backplane", flags.tenant) };
 const transports = [rpc, mcpOps(agent, flags.app, flags.tenant)];
-const apiKey = (server.headers?.Authorization ?? "").replace(/^Bearer /, "");
+const callbacks = recorded("callbacks", client.callbacks);
 const started = Date.now();
 try {
   for (const name of selected)
     for (const ops of transports) {
-      const ctx = context(name, { ops, rpc, own: own[ops.via], apiKey, app: flags.app, tenant: flags.tenant, bucket: `${name}-${ops.via}-${flags.run}` });
+      const ctx = context(name, { ops, rpc, own: own[ops.via], callbacks, app: flags.app, tenant: flags.tenant, bucket: `${name}-${ops.via}-${flags.run}` });
       await scenarios[name](ctx);
     }
   // HTTP-only features run once, with the RPC driver for setup.
   const http = { base: server.url.replace(/\/mcp$/, ""), headers: server.headers ?? {}, tool: (name: string, args: Record<string, unknown>) => agent.callTool({ name, arguments: args }) as never };
   const transfers: Transfer[] = [];
   if (!only || only.includes("http")) {
-    await httpScenario(context("http", { ops: rpc, rpc, own: own.rpc, apiKey, app: flags.app, tenant: flags.tenant, bucket: `http-${flags.run}` }, "http"), http);
+    await httpScenario(context("http", { ops: rpc, rpc, own: own.rpc, callbacks, app: flags.app, tenant: flags.tenant, bucket: `http-${flags.run}` }, "http"), http);
   }
   if (!only || only.includes("video"))
-    await videoScenario(context("video", { ops: rpc, rpc, own: own.rpc, apiKey, app: flags.app, tenant: flags.tenant, bucket: `video-${flags.run}` }, "http"), http, flags.video);
+    await videoScenario(context("video", { ops: rpc, rpc, own: own.rpc, callbacks, app: flags.app, tenant: flags.tenant, bucket: `video-${flags.run}` }, "http"), http, flags.video);
+  // Auth and bot users are written over RPC only, so the scenario runs once, with the typed client; it reads them
+  // through the MCP inspection tools as well.
+  if (!only || only.includes("auth"))
+    await authScenario(context("auth", { ops: rpc, rpc, own: own.rpc, callbacks, app: flags.app, tenant: flags.tenant, bucket: `auth-${flags.run}` }, "rpc"), {
+      client,
+      base: server.url.replace(/\/mcp$/, ""),
+      run: flags.run,
+      tool: mcpTool(agent),
+    });
   if (!only || only.includes("big")) {
-    const ctx = context("big", { ops: rpc, rpc, own: own.rpc, apiKey, app: flags.app, tenant: flags.tenant, bucket: `big-${flags.run}` }, "http");
+    const ctx = context("big", { ops: rpc, rpc, own: own.rpc, callbacks, app: flags.app, tenant: flags.tenant, bucket: `big-${flags.run}` }, "http");
     await bigScenario(ctx, transports[1], http, Number(flags["big-mib"]), flags.pid ? Number(flags.pid) : undefined, transfers);
   }
   // The guard runs only on a full suite: a partial run cannot cover everything.

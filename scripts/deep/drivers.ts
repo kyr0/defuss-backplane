@@ -85,7 +85,7 @@ const fault = (e: unknown): never => {
 };
 
 /** Wraps every method of a client handle so the call is recorded and a BackplaneError becomes a Fault. */
-function recorded<T extends object>(module: string, handle: T): T {
+export function recorded<T extends object>(module: string, handle: T): T {
   return new Proxy(handle, {
     get(target, prop, receiver) {
       const member = Reflect.get(target, prop, receiver);
@@ -116,8 +116,9 @@ const untag = (id: unknown) => (id !== null && typeof id === "object" && "bigint
 const base64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64");
 
 /** The MCP tools; `agent` is connected from the client config file. */
-export function mcpOps(agent: Client, app: string, tenant: string): Ops {
-  async function tool(name: string, args: Any): Promise<unknown> {
+/** One MCP tool call that records its argument paths for the coverage check; a failed call throws a `Fault`. */
+export function mcpTool(agent: Client) {
+  return async function tool(name: string, args: Any): Promise<unknown> {
     const set = used.mcp.get(name) ?? new Set<string>();
     for (const p of paths(args)) set.add(p);
     used.mcp.set(name, set);
@@ -132,7 +133,11 @@ export function mcpOps(agent: Client, app: string, tenant: string): Ops {
     const content = r.structuredContent as { value?: unknown; code?: string; status?: number; message?: string };
     if (r.isError) throw new Fault(String(content?.code), Number(content?.status), String(content?.message ?? JSON.stringify(r.content)));
     return content.value;
-  }
+  };
+}
+
+export function mcpOps(agent: Client, app: string, tenant: string): Ops {
+  const tool = mcpTool(agent);
   const dson = async (name: string, args: Any) => DSON.parse(((await tool(name, { ...args, resultEncoding: "dson" })) as { dson: string }).dson);
   const opts = (o?: Any) => (o ? Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) : {});
   return {

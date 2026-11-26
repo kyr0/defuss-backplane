@@ -1,5 +1,6 @@
 /** VERIFIED: Preserve typed service exceptions across adapters that reduce thrown values to messages. */
 import { AsyncLocalStorage } from "node:async_hooks";
+import { AuthError } from "defuss-auth";
 import { SchedulerError } from "defuss-scheduler";
 import { BackplaneError, type ErrorCode } from "./errors.js";
 
@@ -25,8 +26,20 @@ export function capture(error: unknown) {
   if (context) context.fault = fault;
   return fault;
 }
+/** defuss-auth's codes as the backplane's. Its CONFLICT means an existing account or key, not a revision. */
+const AUTH_CODES: Record<string, ErrorCode> = {
+  INVALID_INPUT: "INVALID_ARGUMENT",
+  SCHEMA: "INVALID_ARGUMENT",
+  UNAUTHENTICATED: "UNAUTHORIZED",
+  FORBIDDEN: "FORBIDDEN",
+  NOT_FOUND: "NOT_FOUND",
+  CONFLICT: "ALREADY_EXISTS",
+  RATE_LIMIT: "RATE_LIMITED",
+  UNAVAILABLE: "UNAVAILABLE",
+};
 function normalize(error: unknown) {
   if (error instanceof BackplaneError) return error;
+  if (error instanceof AuthError) return new BackplaneError(AUTH_CODES[error.code] ?? "INTERNAL_ERROR", error.message);
   if (error instanceof SchedulerError) {
     // A stopped or foreign authority clears once its owner restarts, so the caller retries as for BUSY.
     if (error.code === "CLOSED" || error.code === "OWNER_BUSY")
@@ -129,6 +142,8 @@ export function httpCode(status: number): ErrorCode {
       return "METHOD_NOT_ALLOWED";
     case 413:
       return "PAYLOAD_TOO_LARGE";
+    case 429:
+      return "RATE_LIMITED";
     default:
       return "INTERNAL_ERROR";
   }

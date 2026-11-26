@@ -37,5 +37,17 @@ export function callbackOrigins() {
   }
   return new Set(origins);
 }
+/** The master key of the auth service: base64url of 32 random bytes, as `make env` writes it. Unset, the daemon runs
+ * without auth and bot users; malformed, it fails at startup, so a typo never starts a daemon with auth switched off.
+ * Every app's signing keys and the bot users' keys are encrypted under keys derived from it, so it is backed up with
+ * the data root. */
+export function authMasterKey() {
+  const value = process.env.BACKPLANE_AUTH_MASTER_KEY ?? "";
+  if (value === "") return undefined;
+  const key = /^[A-Za-z0-9_-]{43}$/.test(value) ? Buffer.from(value, "base64url") : undefined;
+  if (key?.length !== 32 || key.toString("base64url") !== value)
+    throw new Error("BACKPLANE_AUTH_MASTER_KEY must be base64url of 32 bytes: make env writes one");
+  return new Uint8Array(key);
+}
 /** OTLP push is off unless BACKPLANE_OTLP is 1, so metrics leave the host only when the operator opts in. */
 export const otlpEnabled = () => flag("BACKPLANE_OTLP");

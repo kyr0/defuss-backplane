@@ -13,8 +13,8 @@ export interface Ctx {
   rpc: Ops;
   /** The transport under test, bound to the daemon's own app `_backplane`. */
   own: Ops;
-  /** The bot key, which RPC callbacks carry. */
-  apiKey: string;
+  /** The callback check over RPC, as the app of a scheduled call uses it while the call runs. */
+  callbacks: { verify(token: string): Promise<Record<string, unknown>> };
   bucket: string;
   app: string;
   tenant: string;

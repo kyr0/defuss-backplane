@@ -113,6 +113,16 @@ test("probe and metrics read the running service's routes, with the key from .en
        if (req.url === "/down") return json(res, 503, { status: "fail" });
        if (req.url === "/metrics")
          return req.headers.authorization === "Bearer k1" ? res.end('# HELP a\\na_total{app="shop"} 1\\nb_total{app="other"} 2\\n') : res.writeHead(401).end();
+       if (req.url === "/rpc" && req.method === "POST") {
+         let body = "";
+         req.on("data", (c) => (body += c));
+         return req.on("end", () => {
+           const call = JSON.parse(body);
+           if (req.headers.authorization !== "Bearer k1") return json(res, 401, { code: "UNAUTHORIZED", error: "no" });
+           if (call.args[0].name === "off") return json(res, 503, { code: "UNAVAILABLE", error: "Auth is off" });
+           json(res, 200, { id: "b1", key: "dfa_x", call });
+         });
+       }
        res.writeHead(404).end();
      });
      server.listen(0, "127.0.0.1", () => console.log(new Date().toISOString() + " INFO listening url=http://127.0.0.1:" + server.address().port));
@@ -132,6 +142,13 @@ test("probe and metrics read the running service's routes, with the key from .en
     expect(raw("metrics", { "key-env": "API_KEY" }).out.split("\n")).toHaveLength(3);
     expect(verb(dir, "metrics")).toMatchObject({ code: 1, out: [{ ok: false, status: 401 }] });
     expect(verb(dir, "metrics", { "key-env": "NONE" })).toMatchObject({ code: 1, out: [{ ok: false, fix: "make env" }] });
+    // bot sends bots.create for the app, as plain JSON with the root key, and prints the bot with its key.
+    expect(verb(dir, "bot", { app: "shop" })).toMatchObject({
+      code: 0,
+      out: [{ ok: true, id: "b1", key: "dfa_x", call: { className: "bots", methodName: "create", args: [{ name: "shop", apps: ["shop"] }] } }],
+    });
+    expect(verb(dir, "bot", { app: "off" })).toMatchObject({ code: 1, out: [{ ok: false, code: "UNAVAILABLE", fix: expect.stringContaining("BACKPLANE_AUTH_MASTER_KEY") }] });
+    expect(verb(dir, "bot")).toMatchObject({ code: 1, out: [{ ok: false, fix: "make bot APP=<app name>" }] });
   } finally {
     verb(dir, "stop");
     await rm(dir, { recursive: true, force: true });

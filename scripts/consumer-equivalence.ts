@@ -21,9 +21,10 @@ const called = new Set<string>();
 
 type Outcome = { value: unknown } | { error: { code: unknown; status: unknown } };
 
-async function viaMcp(name: string, args: Record<string, unknown>, toolScope: object = scope): Promise<Outcome> {
+/** `toolScope` null calls a tool that takes no scope, such as `bots.list`. */
+async function viaMcp(name: string, args: Record<string, unknown>, toolScope: object | null = scope): Promise<Outcome> {
   called.add(name);
-  const r = await agent.callTool({ name, arguments: { scope: toolScope, ...args } });
+  const r = await agent.callTool({ name, arguments: toolScope === null ? args : { scope: toolScope, ...args } });
   const content = r.structuredContent as { value?: unknown; code?: unknown; status?: unknown };
   return r.isError ? { error: { code: content.code, status: content.status } } : { value: content.value };
 }
@@ -53,7 +54,7 @@ async function read(
   name: string,
   args: Record<string, unknown>,
   rpc: () => Promise<unknown>,
-  opts: { dson?: boolean; scope?: object; adapt?: (v: unknown) => unknown } = {},
+  opts: { dson?: boolean; scope?: object | null; adapt?: (v: unknown) => unknown } = {},
 ) {
   const r = await viaRpc(rpc);
   const expected = "value" in r && opts.adapt ? { value: opts.adapt(r.value) } : r;
@@ -153,6 +154,17 @@ try {
   await read("scheduler.listRuns", {}, () => queue.listRuns());
   await read("scheduler.getRun", { id: "none" }, () => queue.getRun("none"));
   await read("scheduler.runHistory", { id: "none" }, () => queue.runHistory("none"));
+  // Auth's read-only tools, on an app registered over RPC with one member and one agent key.
+  const app = await connectBackplane({ app: scope.app });
+  await app.auth.configure({ origin: "http://127.0.0.1:1" });
+  await tenant.auth.addMember({ email: "twin@example.com", password: "equivalence password " + phase, claims: ["member"] });
+  await tenant.auth.createApiKey({ name: "twin agent" });
+  const members = { app: scope.app, tenant: scope.tenant };
+  await read("auth.status", {}, () => app.auth.status(), { scope: { app: scope.app } });
+  await read("auth.members", { page: { limit: 10 } }, () => tenant.auth.members({ limit: 10 }), { scope: members });
+  await read("auth.members", { page: { limit: 1, after: "~" } }, () => tenant.auth.members({ limit: 1, after: "~" }), { scope: members });
+  await read("auth.listApiKeys", {}, () => tenant.auth.listApiKeys(), { scope: members });
+  await read("bots.list", {}, () => app.bots.list(), { scope: null });
   // Every tool the server lists ran through both transports.
   assert.deepEqual([...called].sort(), names);
   process.stdout.write(JSON.stringify({ phase, equivalent: called.size }) + "\n");

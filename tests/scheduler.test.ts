@@ -28,7 +28,7 @@ test("schedules are shared by RPC and MCP, and the client queue runs a worker", 
   }
   try {
     const listed = (await agent.listTools()).tools;
-    expect(listed).toHaveLength(29);
+    expect(listed).toHaveLength(33);
     const hints = Object.fromEntries(
       listed
         .filter((t) => t.name.startsWith("scheduler."))

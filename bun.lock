@@ -15,13 +15,14 @@
         "defuss-o11y": "0.3.0",
         "defuss-rpc": "4.5.0",
         "defuss-scheduler": "0.2.0",
-        "defuss-serve": "0.4.0",
+        "defuss-serve": "0.5.0",
         "defuss-vfs": "0.3.0",
       },
       "devDependencies": {
         "@modelcontextprotocol/client": "2.4.0",
         "@types/bun": "1.4.5",
         "@types/node": "^26.0.0",
+        "defuss-auth": "0.2.0",
         "defuss-db": "3.3.0",
         "oxlint": "1.94.0",
         "pkgroll": "^2.0.0",
@@ -405,6 +406,8 @@
 
     "define-properties": ["define-properties@1.2.1", "", { "dependencies": { "define-data-property": "^1.0.1", "has-property-descriptors": "^1.0.0", "object-keys": "^1.1.1" } }, "sha512-8QmQKqEASLd5nx0U1B1okLElbUuuttJ/AnYmRXbbbGDWh6uS208EjD4Xqq/I9wK7u0v6O08XhTWnt5XtEbR6Dg=="],
 
+    "defuss-auth": ["defuss-auth@0.2.0", "", { "peerDependencies": { "defuss-db": "3.2.0 || 3.3.0", "defuss-storage": "0.4.1" }, "optionalPeers": ["defuss-db", "defuss-storage"] }, "sha512-CpDjQPrsTotVjuEF4SNB90PZSFsjteg8VY6nutaoXVUtHtZ30PTGYYHhHJJdDn5HbUIBe4LD1ib1DujccbHhrA=="],
+
     "defuss-brotli": ["defuss-brotli@0.3.0", "", { "bin": { "defuss-brotli": "dist/cli.js" } }, "sha512-maseMpFnl5lCBt0dZeyMmHpGUjtmV7sq6WcyjNM7EBwOQd+uX+tPyu1j5fvlqDPJpuawp3WltotjIR+lyocd/A=="],
 
     "defuss-dataview": ["defuss-dataview@0.10.0", "", {}, "sha512-JjYxG31B1qxFAkQIpkjkCgVxbvFrNZ68WLyTTtUKHOtEx6oyJYM40/Ho0eyJTbXwQTVdhBOdJQGozJuoypC7LQ=="],
@@ -433,7 +436,7 @@
 
     "defuss-search": ["defuss-search@0.5.0", "", { "peerDependencies": { "defuss-lexicalsearch": "^0.4.0", "defuss-vectorsearch": "^0.4.0" }, "optionalPeers": ["defuss-lexicalsearch", "defuss-vectorsearch"] }, "sha512-EEUVEIKMDzkt+GO9OmvIv1FXMczRremsIVpmrJ6XiQGSRutL/rP8BOFh4wVhoKRNwz+ApawC56goOPeChw3F+Q=="],
 
-    "defuss-serve": ["defuss-serve@0.4.0", "", {}, "sha512-LF/2LWq3mbbO253Zz+0pdt3RB+ZcV4Qv7BAp1j0r2seDu5bFHl5tGUmdKeU5P3jnI/bGqftaPMykBdx/7oqc1A=="],
+    "defuss-serve": ["defuss-serve@0.5.0", "", {}, "sha512-moj/Xul9S+rA/EqEiFUKy/mBjYAFcH9rm+dKe2upjYZQy7pKwKxVcNQE5wo4zAmR+L/XLs20O9aE/s+zXJfD0A=="],
 
     "defuss-storage": ["defuss-storage@0.4.1", "", {}, "sha512-C+p8PBqeAhCefACA/dKxVR9ZmAMIaLb7R30UiuA850gFUyP8gMJxsWa9qC4tsYeqhq8VUrz23NZFcxDR+QVD9w=="],
 

@@ -29,11 +29,13 @@ start: ## build quietly, then run RUN detached (pid in tmp/, logs appended to va
 
 # setup creates a missing .env from .env.example with a random bot key, readable by the owner only. Why random, not a
 # fixed default key: every holder may access every tenant. An existing .env is never rewritten.
-env: ## create a missing .env with a random API_KEY, readable by you only; an existing .env stays
-	@if [ -f .env ]; then echo ".env exists; left unchanged"; else $(MAKE) -s .env; fi
+env: ## create a missing .env with a random API_KEY and auth master key, readable by you only; an existing .env only gains a missing master key
+	@if [ -f .env ]; then node scripts/master-key.ts .env; else $(MAKE) -s .env; fi
 
 .env:
-	@(umask 077; set -C; sed "s/^API_KEY=$$/API_KEY=$$(openssl rand -hex 32)/" .env.example > $@) && echo "created .env with a new API_KEY"
+	@(umask 077; set -C; sed -e "s/^API_KEY=$$/API_KEY=$$(openssl rand -hex 32)/" \
+	  -e "s/^BACKPLANE_AUTH_MASTER_KEY=$$/BACKPLANE_AUTH_MASTER_KEY=$$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')/" \
+	  .env.example > $@) && echo "created .env with a new API_KEY and BACKPLANE_AUTH_MASTER_KEY"
 
 stop: ## SIGTERM the service group, SIGKILL after 5 s; prints JSON
 	@$(SERVICE) stop
@@ -70,6 +72,9 @@ healthz: ## liveness of the running daemon (/livez) as JSON; exits 1 unless it a
 
 metrics: ## the running daemon's Prometheus scrape, with the bot key from .env; APP=<name> keeps that app's lines
 	@$(SERVICE) --key-env API_KEY $(if $(APP),--app $(APP)) metrics
+
+bot: ## create the bot user of APP=<name> on the running daemon with the root key from .env; prints its key once as JSON
+	@$(SERVICE) --key-env API_KEY --app "$(APP)" bot
 
 results: ## show the last package verification results
 	@cat output/e2e.json

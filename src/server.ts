@@ -1,6 +1,9 @@
 /** VERIFIED: defuss-serve owns the one loopback listener. Every endpoint is a plugin that applies the same Host and
- * Origin checks before it reads a request body; all but the health probes also require the bot key. */
+ * Origin checks before it reads a request body; all but the health probes and the auth routes also require the root
+ * key or a bot key, and run as that caller (access.ts). The auth routes at /apps take the browser's Origin, which
+ * cookie-mode logins need, and want an app's proxy key in X-Backplane-Key instead. */
 import { createHash, timingSafeEqual } from "node:crypto";
+import { realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { createMcpHttp } from "defuss-mcp/http";
 import { createRpcServer } from "defuss-rpc/server";
@@ -9,14 +12,21 @@ import { createServer, type ServePlugin } from "defuss-serve";
 import { createServices } from "./services.js";
 import { makeTools } from "./tools.js";
 import { observeMethods, withFaults, type Recorder } from "./faults.js";
+
+/** Signing-key rotation and cleanup of expired sessions and keys, in every app and for the bots. */
+const MAINTAIN_MS = 60 * 60 * 1000;
 import { statuses, type ErrorCode } from "./errors.js";
 import { createDaemonLog, reason } from "./log.js";
 import { openOwnLog } from "./logs.js";
 import { schedulerApi } from "./scheduler.js";
 import { createTelemetry } from "./telemetry.js";
 import { createTransfers, fault } from "./transfer.js";
-import { callbackOrigins, dataRoot, otlpEnabled, settings } from "./config.js";
-import { startCallbacks } from "./callbacks.js";
+import { authMasterKey, callbackOrigins, dataRoot, otlpEnabled, settings } from "./config.js";
+import { callbackTokens, startCallbacks } from "./callbacks.js";
+import { type Caller, allowApp, isAdmin, mayUseApp, requireAdmin, runAs } from "./access.js";
+import { openAuth, PROXY_KEY_HEADER } from "./auth.js";
+import { openBots } from "./bots.js";
+import { capture } from "./faults.js";
 
 const limit = 1024 * 1024;
 const digest = (value: string) => createHash("sha256").update(value).digest();
@@ -43,6 +53,7 @@ export async function listen() {
   const config = settings();
   const push = otlpEnabled();
   const origins = callbackOrigins();
+  const masterKey = authMasterKey();
   // A data root the daemon cannot write fails here, before anything listens.
   const ownLog = await openOwnLog(dataRoot());
   const log = createDaemonLog(ownLog);
@@ -74,10 +85,42 @@ export async function listen() {
     await log.close();
     throw error;
   }
+  // defuss-auth refuses a directory path that passes a symlink, such as /var on macOS, so it gets the real path.
+  let auth, bots;
+  try {
+    const root = await realpath(dataRoot());
+    bots = await openBots(root, masterKey);
+    auth = await openAuth(root, masterKey, log.warn);
+  } catch (error) {
+    await bots?.close();
+    await scheduler.close();
+    await telemetry.obs.shutdown();
+    await log.close();
+    throw error;
+  }
+  const tokens = callbackTokens();
   const services = createServices(dataRoot(), meter, ownLog);
   const rpc = createRpcServer({
     ...services.api,
     scheduler: observeMethods(schedulerApi(scheduler, origins), meter("scheduler")),
+    auth: observeMethods(auth.api, meter("auth")),
+    bots: observeMethods(bots.api, meter("bots")),
+    callbacks: observeMethods(tokens.api, meter("callbacks")),
+  });
+  // Every call names its app in the scope it takes first, except the bot users (admin only) and the callback check,
+  // which checks the token's app itself. MCP tools reach the same functions through rpc.fetch, so this covers both.
+  rpc.addHook({
+    phase: "guard",
+    fn: (namespace, _method, args) => {
+      try {
+        if (namespace === "bots") requireAdmin();
+        else if (namespace !== "callbacks") allowApp((args[0] as { app?: unknown } | null | undefined)?.app);
+        return true;
+      } catch (error) {
+        capture(error);
+        return false;
+      }
+    },
   });
   const mcp = createMcpHttp(makeTools(rpc), {
     mode: "json",
@@ -105,17 +148,54 @@ export async function listen() {
           : endpoint(request),
     };
   }
-  /** Adds the bot key check. The routes declare no methods, so an unauthenticated request gets 401 rather than 405
-   * and learns nothing about them. */
-  function guarded(name: string, routes: ServePlugin["routes"], endpoint: Endpoint) {
-    return local(name, routes, (request) =>
-      timingSafeEqual(credential, digest(request.headers.get("authorization") ?? ""))
-        ? endpoint(request)
-        : fault(401, "Bot key required", {
-            "WWW-Authenticate": 'Bearer realm="defuss-backplane"',
-          }),
-    );
+  /** The root key as `Bearer <API_KEY>`, or a bot's as `ApiKey <key>`; null for anything else. */
+  async function identify(authorization: string): Promise<Caller | null> {
+    if (timingSafeEqual(credential, digest(authorization))) return { kind: "root" };
+    return /^ApiKey /i.test(authorization) ? bots!.authenticate(authorization) : null;
   }
+  /** Adds the key check and runs the endpoint as the caller. The routes declare no methods, so an unauthenticated
+   * request gets 401 rather than 405 and learns nothing about them. */
+  function guarded(name: string, routes: ServePlugin["routes"], endpoint: Endpoint) {
+    return local(name, routes, async (request) => {
+      let who: Caller | null;
+      try {
+        who = await identify(request.headers.get("authorization") ?? "");
+      } catch (error) {
+        log.error(`bot check failed error="${reason(error)}"`);
+        return fault(503, "Bot keys cannot be checked now");
+      }
+      return who
+        ? runAs(who, () => endpoint(request))
+        : fault(401, "Bot key required", { "WWW-Authenticate": 'Bearer realm="defuss-backplane"' });
+    });
+  }
+  /** The auth routes of every app at /apps/<app>/, for the app's proxy. The proxy sends its key in X-Backplane-Key
+   * because Authorization carries the end user's credential. The key must be the root key, an admin bot's or the bot
+   * key of the app in the path, so one app's key cannot drive another app's logins or choose its rate keys. */
+  const hosted: ServePlugin = {
+    name: "auth",
+    routes: [{ path: "/apps", prefix: true }],
+    async fetch(request) {
+      if (!accepted.has(request.headers.get("host") ?? "")) return fault(403, "Forbidden origin or host");
+      if (!auth!.enabled()) return fault(404, "Auth is off: set BACKPLANE_AUTH_MASTER_KEY");
+      const key = request.headers.get(PROXY_KEY_HEADER) ?? "";
+      let app: string, who: Caller | null;
+      try {
+        app = decodeURIComponent(new URL(request.url).pathname.split("/")[2] ?? "");
+      } catch {
+        return fault(400, "Malformed percent-encoding in the path");
+      }
+      try {
+        // The header carries the bare key: the root key, or a bot's.
+        who = key ? ((await identify("Bearer " + key)) ?? (await identify("ApiKey " + key))) : null;
+      } catch (error) {
+        log.error(`bot check failed error="${reason(error)}"`);
+        return fault(503, "Bot keys cannot be checked now");
+      }
+      if (!who || !mayUseApp(app, who)) return fault(403, "A proxy key for this app is required");
+      return auth!.fetch(request);
+    },
+  };
   /** RPC and MCP calls carry at most 1 MiB, buffered here so both protocols reject larger bodies alike. */
   async function call(request: Request, isMcp: boolean) {
     if (!isMcp && request.method !== "POST")
@@ -142,8 +222,22 @@ export async function listen() {
       guarded("files", [{ path: "/files", prefix: true }], transfers.files),
       // A supervisor polls the probes without the key. They report only pass or fail per check; /metrics names apps.
       local("probes", ["/health", "/healthz", "/livez", "/readyz"].map((path) => ({ path })), telemetry.obs.fetch),
-      guarded("metrics", [{ path: "/metrics" }], telemetry.obs.fetch),
+      // The metrics name every app, so an app's bot sees the lines of its apps and those that name no app.
+      guarded("metrics", [{ path: "/metrics" }], async (request) => {
+        const answer = await telemetry.obs.fetch(request);
+        if (isAdmin() || !answer.ok) return answer;
+        const lines = (await answer.text()).split("\n").filter((line) => {
+          const app = /[{,]app="((?:[^"\\]|\\.)*)"/.exec(line)?.[1];
+          return app === undefined || mayUseApp(JSON.parse('"' + app + '"'));
+        });
+        const headers = new Headers(answer.headers);
+        headers.delete("content-length");
+        return new Response(lines.join("\n"), { status: answer.status, headers });
+      }),
+      hosted,
     ],
+    // The app proxies on loopback set X-Forwarded-For, which the auth routes' per-client login limits read.
+    trustedProxies: ["127.0.0.1"],
     // Uploads have no size or time limit, so long transfers can finish. RPC and MCP bodies stop at 1 MiB above.
     maxBodyBytes: Number.MAX_SAFE_INTEGER,
     bodyTimeoutMs: 0,
@@ -162,6 +256,8 @@ export async function listen() {
       mcp.close(),
       services.close(),
       scheduler?.close(),
+      auth.close(),
+      bots.close(),
       telemetry.obs.shutdown(),
     ]).finally(() => log.close());
   try {
@@ -178,11 +274,22 @@ export async function listen() {
   telemetry.watch(() => server.stats, services.handles);
   // Callbacks start once the daemon listens, so no failed startup has calls in flight.
   const callbacks = startCallbacks(scheduler, {
-    apiKey: config.apiKey,
+    tokens,
     origins,
     warn: log.warn,
     record: telemetry.callback,
   });
+  const maintenance = setInterval(() => {
+    for (const [name, run] of [["auth", () => auth.maintain()], ["bots", () => bots.maintain()]] as const)
+      run().then(
+        (outcome) => {
+          for (const [app, result] of Object.entries(outcome ?? {}))
+            if ((result as { error?: string } | null)?.error) log.warn(`auth maintenance failed app=${app} error=${(result as { error: string }).error}`);
+        },
+        (error) => log.warn(`${name} maintenance failed error="${reason(error)}"`),
+      );
+  }, MAINTAIN_MS);
+  maintenance.unref();
   return {
     url: "http://127.0.0.1:" + server.port,
     log,
@@ -191,6 +298,7 @@ export async function listen() {
       // previous object. The final OTLP export runs after the requests drain and before the stores close. The log
       // closes last, so a fault while closing still gets its line. Callbacks in flight get 2.5 s while requests drain.
       log.info("stopping");
+      clearInterval(maintenance);
       telemetry.obs.drain();
       await Promise.all([server.stop(), callbacks.close()]);
       try {
@@ -199,7 +307,7 @@ export async function listen() {
         try {
           await mcp.close();
           await rpc.close();
-          await Promise.all([services.close(), scheduler.close()]);
+          await Promise.all([services.close(), scheduler.close(), auth.close(), bots.close()]);
         } finally {
           await log.close();
         }

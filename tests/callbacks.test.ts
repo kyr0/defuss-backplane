@@ -19,14 +19,16 @@ async function until<T>(read: () => Promise<T>, done: (value: T) => boolean, ms 
 }
 /** What the app below serves, the type its schedules are built from. */
 type AppApi = { jobs: { notify(text: string, count: number): Promise<{ ok: boolean }> } };
-/** An app's own defuss-rpc server on loopback, as an app service would run it. */
-function app(answer?: (request: Request) => Response | undefined) {
-  const calls: { args: unknown[]; headers: Headers }[] = [];
+/** An app's own defuss-rpc server on loopback, as an app service would run it. `check` runs inside each call, as an
+ * app checks the callback token while the call is in flight. */
+function app(answer?: (request: Request) => Response | undefined, check?: (headers: Headers) => Promise<unknown>) {
+  const calls: { args: unknown[]; headers: Headers; checked?: unknown }[] = [];
   let last: Headers | undefined;
   const api: AppApi = {
     jobs: {
       async notify(...args: unknown[]) {
-        calls.push({ args, headers: last! });
+        const headers = last!;
+        calls.push({ args, headers, checked: await check?.(headers).catch((e: unknown) => fault(Promise.reject(e))) });
         return { ok: true };
       },
     },
@@ -43,11 +45,12 @@ function app(answer?: (request: Request) => Response | undefined) {
   return { calls, url: `http://127.0.0.1:${server.port}/rpc`, stop: () => server.stop(true) };
 }
 
-test("a schedule with handler _rpc calls the app's RPC function with its arguments and the bot key", async () => {
-  const { headers, stop } = await start();
-  const target = app();
+test("a schedule with handler _rpc calls the app's RPC function with its arguments and a token valid while it runs", async () => {
+  const { stop } = await start();
+  const backplane = await connectBackplane({ app: "shop" });
+  const target = app(undefined, (headers) => backplane.callbacks.verify(headers.get("x-backplane-callback") ?? ""));
   try {
-    const queue = (await connectBackplane({ app: "shop" })).tenant("acme").scheduler("jobs");
+    const queue = backplane.tenant("acme").scheduler("jobs");
     const created = await queue.create({
       id: "notify",
       cron: "* * * * * *",
@@ -57,8 +60,12 @@ test("a schedule with handler _rpc calls the app's RPC function with its argumen
     const calls = await until(async () => target.calls, (c) => c.length > 0);
     await queue.pause("notify", { revision: created.revision, requestId: "pause" });
     expect(calls[0].args).toEqual(["hello", 2]);
-    expect(calls[0].headers.get("authorization")).toBe(headers.Authorization);
+    // The daemon's key never leaves it; the app learns the call's scope from the token instead.
+    expect(calls[0].headers.get("authorization")).toBeNull();
+    expect(calls[0].checked).toMatchObject({ app: "shop", tenant: "acme", bucket: "jobs", schedule: "notify" });
     expect(calls[0].headers.get("x-backplane-schedule")).toBe("notify");
+    // Once the call ended, its token is gone.
+    expect(await fault(backplane.callbacks.verify(calls[0].headers.get("x-backplane-callback")!))).toBe("NOT_FOUND 404");
     const runs = await until(
       () => queue.listRuns(),
       (page) => page.items.some((run) => run.state === "succeeded"),

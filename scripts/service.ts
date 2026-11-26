@@ -1,4 +1,4 @@
-/** The Makefile lifecycle verbs of a detached service: `node scripts/service.ts start|stop|status|log|probe|metrics`.
+/** The Makefile lifecycle verbs of a detached service: `node scripts/service.ts start|stop|status|log|probe|metrics|bot`.
  * VERIFIED: tests/service.test.ts runs every verb, a dead start, a missing .env and a failed build against real
  * processes.
  *
@@ -243,6 +243,42 @@ async function probe() {
   }
 }
 
+/** A defuss-backplane bot key starts with defuss-auth's `dfa_` and travels as `ApiKey`; the root key as a bearer token. */
+const scheme = (key: string) => (key.startsWith("dfa_") ? "ApiKey " : "Bearer ") + key;
+
+/** Creates the bot user of --app on the running daemon with the root key from .env (--key-env), and prints it once as
+ * JSON with its key. The key reaches only that app, so each app service gets its own. Exits 1 on any failure. */
+async function bot() {
+  const at = running();
+  if ("report" in at) return (print(at.report), 1);
+  const app = flags.app;
+  if (!app) return (print({ service: name, state: "running", ok: false, error: "APP is required", fix: "make bot APP=<app name>" }), 1);
+  const keyName = flags["key-env"] ?? "API_KEY";
+  const key = existsSync(".env") ? parseEnv(readFileSync(".env", "utf8"))[keyName] : undefined;
+  if (!key) return (print({ service: name, state: "running", ok: false, error: keyName + " is not set in .env", fix: "make env" }), 1);
+  // Plain JSON: the daemon reads DSON first and JSON second, and a bot is plain JSON both ways.
+  const response = await fetch(at.url + "/rpc", {
+    method: "POST",
+    headers: { Authorization: scheme(key), "content-type": "application/json" },
+    body: JSON.stringify({ className: "bots", methodName: "create", args: [{ name: app, apps: [app] }] }),
+    signal: AbortSignal.timeout(10000),
+  }).catch((error: Error) => error);
+  if (response instanceof Error) return (print({ service: name, state: "running", ok: false, error: response.message }), 1);
+  const body = await response.text();
+  if (!response.ok) {
+    let fault: { code?: string; error?: string } = {};
+    try {
+      fault = JSON.parse(body);
+    } catch {
+      fault = { error: body.slice(0, 200) };
+    }
+    const fix = fault.code === "UNAVAILABLE" ? "set BACKPLANE_AUTH_MASTER_KEY in .env (make env writes one), then make restart" : undefined;
+    return (print({ service: name, state: "running", ok: false, status: response.status, ...fault, ...(fix ? { fix } : {}) }), 1);
+  }
+  print({ service: name, state: "running", ok: true, ...JSON.parse(body) });
+  return 0;
+}
+
 /** Prints the running service's Prometheus scrape, the format scrapers and `grep` read, so not JSON. With --key-env
  * the bearer token comes from .env; with --app only that app's lines remain. A failure prints JSON and exits 1. */
 async function metrics() {
@@ -252,7 +288,7 @@ async function metrics() {
   const key = keyName && existsSync(".env") ? parseEnv(readFileSync(".env", "utf8"))[keyName] : undefined;
   if (keyName && !key) return (print({ service: name, state: "running", ok: false, error: keyName + " is not set in .env", fix: "make env" }), 1);
   const target = at.url + "/metrics";
-  const response = await fetch(target, { headers: key ? { Authorization: "Bearer " + key } : {}, signal: AbortSignal.timeout(5000) }).catch(
+  const response = await fetch(target, { headers: key ? { Authorization: scheme(key) } : {}, signal: AbortSignal.timeout(5000) }).catch(
     (error: Error) => error,
   );
   if (response instanceof Error || !response.ok) {
@@ -276,11 +312,12 @@ const verbs: Record<string, () => number | Promise<number>> = {
   log,
   probe,
   metrics,
+  bot,
 };
 if (import.meta.main) {
   const verb = verbs[positionals[0] ?? ""];
   if (!verb) {
-    console.error("usage: node scripts/service.ts start|stop|status|log|probe|metrics --name <service> [--run <cmd>] [--build <cmd>] [--path <route>] [--key-env <key>] [--app <app>]");
+    console.error("usage: node scripts/service.ts start|stop|status|log|probe|metrics|bot --name <service> [--run <cmd>] [--build <cmd>] [--path <route>] [--key-env <key>] [--app <app>]");
     process.exit(2);
   }
   process.exitCode = await verb();

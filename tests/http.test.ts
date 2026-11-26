@@ -44,6 +44,10 @@ test("authenticated discovery, shared RPC/MCP calls and loopback HTTP policy", a
     const tenant = app.tenant("acme");
     const tools = (await agent.listTools()).tools.map((t) => t.name).sort();
     expect(tools).toEqual([
+      "auth.listApiKeys",
+      "auth.members",
+      "auth.status",
+      "bots.list",
       "cache.delete",
       "cache.get",
       "cache.getVersioned",

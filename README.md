@@ -14,7 +14,7 @@ bun add defuss-backplane
 
 npm or bun also installs [defuss-vfs](https://github.com/kyr0/defuss-vfs), [defuss-logs](https://github.com/kyr0/defuss-logs), [defuss-scheduler](https://github.com/kyr0/defuss-scheduler) and the other runtime packages. The package bundles the [defuss-db](https://github.com/kyr0/defuss-db) engine code the daemon needs.
 
-Create a private bot key once, in the directory where the daemon will run. The command writes `.env` with a random `API_KEY`, readable only by you, and fails instead of overwriting an existing `.env`. In a checkout of this repository, `make env` does the same from `.env.example`, and `make setup` runs it.
+Create a private bot key once, in the directory where the daemon will run. The command writes `.env` with a random `API_KEY`, readable only by you, and fails instead of overwriting an existing `.env`. In a checkout of this repository, `make env` does the same from `.env.example`, with a `BACKPLANE_AUTH_MASTER_KEY` too, and `make setup` runs it. An existing `.env` keeps every line; it only gains a master key when it has none, and a key already set is never replaced, because it encrypts the auth stores. VERIFIED by tests/setup.test.ts. Restart the daemon after the key is added.
 
 ```sh
 (umask 077; set -C; printf 'API_KEY=%s\n' "$(openssl rand -hex 32)" > .env)
@@ -65,6 +65,7 @@ An app service connects once and then uses any of these services in any tenant. 
 | Files | `acme.vfs(bucket)` | Files under path keys, of any size. Calls carry up to 1 MiB, and `upload` and `download` stream larger files. `/files` serves byte ranges, so a media player can seek. | [Files](#files) |
 | Logs | `shopApp.logs()` for the app, `acme.logs()` for the tenant | One log for the app and one per tenant, filtered by level and time. A [defuss-logs](https://github.com/kyr0/defuss-logs) logger writes into them in batches. | [Logs](#logs) |
 | Scheduler | `acme.scheduler(bucket)` | Cron schedules with time zones, retries and run history. At each run the daemon calls one of your RPC functions, or a worker of yours takes the run. | [Scheduling](#scheduling) |
+| Auth | `shopApp.auth` to register, `acme.auth` per tenant | Your app's users, who sign in with email and password, and API keys for agents. Each call to your app is checked against live state. | [Authentication](#authentication) |
 
 Cache, documents and files take a revision on writes, so two writers cannot overwrite each other unnoticed ([Conditional writes](#conditional-writes)). Over RPC, cache values, documents and log arguments keep native types such as dates, binary data and bigints. Scheduler payloads and results are JSON.
 
@@ -73,22 +74,25 @@ Cache, documents and files take a revision on writes, so two writers cannot over
 | Typed client `defuss-backplane/client` | App backends on Node.js or Bun | `/rpc` |
 | MCP tools | Agents. `make mcp-config` writes their client entry. | `/mcp` |
 | Plain HTTP | File streams, probes and metrics | `/vfs/object`, `/files`, `/readyz`, `/metrics` |
+| Auth routes | Your app's proxy for its browser's sign-in | `/apps/<app>/auth/*` |
 
-Every route needs the bot key, except the probes. The daemon listens on 127.0.0.1 only.
+Every route needs the root key or a bot key, except the probes and the auth routes, which want your app's key in `X-Backplane-Key`. The daemon listens on 127.0.0.1 only.
 
 ## Security
 
-The backplane relies on two things: the bot key, and that only processes on the same machine can reach it.
+The backplane relies on two things: its keys, and that only processes on the same machine can reach it.
 
 | Protection | What it means for you |
 | --- | --- |
-| Bot key `API_KEY` | Every request needs `Authorization: Bearer <API_KEY>`, except the health probes. A missing or wrong key gets 401. The daemon does not start without a key. `make env` creates a random 32-byte key in `.env`, readable only by you. |
-| One key, full access | Every holder of the key reaches every app and tenant, their schedules included. Give it only to your backend processes and local agents, never to a browser or a user. `make mcp-config` writes it into `.mcp.json`, readable only by you and ignored by Git. |
+| Root key `API_KEY` | Every request needs `Authorization: Bearer <API_KEY>` or a bot key, except the health probes and the auth routes. A missing or wrong key gets 401. The daemon does not start without a root key. `make env` creates a random 32-byte key in `.env`, readable only by you. |
+| Root key, full access | The root key reaches every app and tenant, their schedules included, and manages the bots. Keep it for operators and local agents, never a browser or a user. `make mcp-config` writes it into `.mcp.json`, readable only by you and ignored by Git. |
+| One bot per app | `bots.create({ name, apps: ["shop"] })` returns a key that reaches only the apps it names, over RPC, MCP and both file routes; another app's scope gets 403. `/metrics` shows such a bot only its apps' lines and those that name no app. Give each app service its own bot key, sent as `Authorization: ApiKey <key>`; `make bot APP=<name>` creates one on the running daemon with the root key from `.env`. A bot with `admin: true` reaches every app and manages bots. Bot keys expire after 90 days, so rotate them before with `bots.rotate`. |
+| Master key | `BACKPLANE_AUTH_MASTER_KEY` encrypts the bots' and every app's signing keys. Back it up with the data root. VERIFIED by defuss-auth's tests: under another master key, stored signing keys fail to decrypt, so no app can sign anyone in. |
 | Loopback only | The daemon listens on 127.0.0.1, so no other machine can connect. `PORT` changes the port, never the host. |
 | Host check | A request whose `Host` is not 127.0.0.1 or localhost at the daemon's port gets 403. A web page whose domain resolves to 127.0.0.1 still cannot pass. |
-| No browsers | Any request with an `Origin` header gets 403, even with the key, so no web page can call the daemon. A browser reaches files only through your backend, which checks its own users and then proxies `/files`. |
-| Callbacks | The daemon sends the bot key with each RPC callback, so a schedule may call only loopback URLs or the origins in `BACKPLANE_CALLBACK_ORIGINS`. A redirect fails the call. The typed client refuses redirects too. |
-| Your users | The backplane has no users or roles. Your service signs its users in and decides which tenant each request may use. |
+| No browsers | Any request with an `Origin` header gets 403, even with a key, so no web page can call the daemon. A browser reaches files only through your backend, which checks its own users and then proxies `/files`. The auth routes take `Origin`, because cookie-mode sign-in needs it, but only from your app's proxy with its key. |
+| Callbacks | A schedule may call only loopback URLs or the origins in `BACKPLANE_CALLBACK_ORIGINS`. Each call carries a one-time token instead of a key; your app checks it with `callbacks.verify`. A redirect fails the call. The typed client refuses redirects too. |
+| Your users | Each app has its own users, in its own store. Your service forwards sign-in to the backplane, asks it who sent each call, and decides what that user may do. |
 
 The data on disk is not encrypted. [ARCH.md](ARCH.md) covers file modes, retention and personal data under "Security and operations".
 
@@ -148,6 +152,50 @@ const page = await rpc.db.query(scope, { limit: 25 });
 ```
 
 A failed call then throws defuss-rpc's error, which carries the daemon's HTTP `status` and its JSON `body` with `code`. Logs take `{ app, tenant? }` as their scope.
+
+## Authentication
+
+The backplane hosts sign-in for your app on [defuss-auth](https://github.com/kyr0/defuss-auth). Your app keeps its own origin: its listener forwards `/auth/*` to the backplane, and its API asks the backplane who sent each call. The browser never talks to the backplane.
+
+```mermaid
+flowchart LR
+  browser["Browser or agent"] -->|"/auth/* sign-in"| app["Your app's listener"]
+  browser -->|"/rpc with Bearer or ApiKey"| app
+  app -->|"/apps/APP/auth/* with X-Backplane-Key"| backplane["defuss-backplane"]
+  app -->|"auth.authenticate per call"| backplane
+```
+
+```ts
+import { connectBackplane } from "defuss-backplane/client";
+import { createServer } from "defuss-serve";
+
+// The app's own bot key from bots.create, in its .env.
+const shopApp = await connectBackplane({ app: "shop", apiKey: process.env.BACKPLANE_API_KEY });
+await shopApp.auth.configure({ origin: "https://shop.example" });
+// /auth/* of the app's listener goes to the backplane, with the app's key.
+const server = createServer({ host: "127.0.0.1", port: 3000, plugins: [shopApp.auth.proxy() /* , your routes */] });
+// In each API call: who sent it, in the tenant it acts in.
+const who = await shopApp.tenant("acme").auth.authenticate(request.headers.get("authorization") ?? "");
+```
+
+`configure` registers the app with its public origin, the only origin whose pages may send sign-in writes; calling it again with a new origin or mode changes it. It also takes `mode`: `cookie` (default) keeps the refresh token in an HttpOnly cookie on your origin, and `token` hands it to the page. WebKit drops `Secure` cookies over plain HTTP, so use `token` there or serve HTTPS. The daemon reopens every registered app after a restart. `auth.proxy()` is a [defuss-serve](https://github.com/kyr0/defuss-serve) plugin that mounts at `/auth`, the refresh cookie's path, and sends the connection's key in `X-Backplane-Key`; with another server, forward `/auth/*` to `/apps/<app>/auth/*` with that field yourself. In the browser, `createAuthClient({ baseUrl: location.origin + "/auth" })` from `defuss-auth/client` signs in and refreshes.
+
+`authenticate` checks a `Bearer` access token or an `ApiKey` against live state, so a revoked key or a removed member fails on the next call. It returns `{ app, subjectId, subjectKind, tenantId, claims, method, credentialId, sessionId }` and fails for a credential of another tenant. There is no email delivery, so there is no self sign-up and no password reset. Accounts come from these calls:
+
+| Call on `acme.auth` | What it does |
+| --- | --- |
+| `addMember({ email, password?, claims? })` | Grants the person access to the tenant with `claims`, creating the account if the email is new. The password applies to a new account only. |
+| `removeMember(subjectId)` | Ends the person's access to the tenant. Their tokens fail on the next call. |
+| `setPassword(subjectId, password)` | Replaces a member's password. At least 15 characters. |
+| `createApiKey({ name, claims? })` | A service account in the tenant with one key, for an agent. The key is returned once. |
+| `listApiKeys()`, `revokeApiKey(id)` | The tenant's agent keys, and ending one. |
+| `members({ limit?, after? })` | A page of the tenant's members as `{ items, next }`, each with `subjectId`, `email`, `status`, `claims` and times; pass `next` as `after` for the following page. A page can hold fewer than `limit` items, because accounts of other tenants are skipped. |
+
+`shopApp.auth.status()` says whether auth is on and how the app registered: `{ app, enabled, configured, origin, mode, issuer, audience }`, the last four once it is configured. It answers while auth is off, so it shows why the other calls fail.
+
+Agents debug sign-in over MCP with four read-only tools: `auth.status`, `auth.members`, `auth.listApiKeys` and `bots.list`. They show no password, session or key secret, and a bot reads only its own apps. Every call that creates or changes an account, a key or a bot stays RPC-only. Why not MCP for those too: a new key or password would land in the agent's transcript, and whoever holds the root key makes them over RPC. VERIFIED by tests/auth.test.ts.
+
+App names for auth are lowercase letters, digits, `-` and `_`, and tenant names letters, digits, `-` and `_` up to 48 characters; others get `INVALID_ARGUMENT`. Without `BACKPLANE_AUTH_MASTER_KEY`, every auth and bot call but `auth.status` answers `UNAVAILABLE`.
 
 ## Conditional writes
 
@@ -239,9 +287,9 @@ await tenant.scheduler("jobs").create({
 });
 ```
 
-The payload is the callback's `url` plus the call, `{ v, className, methodName, args }`, which agents read as plain JSON. A payload without `v`, written before defuss-rpc versioned its calls, still runs, and a `v` that defuss-rpc does not know fails `create` with `INVALID_ARGUMENT`. The daemon sends the call with defuss-rpc's `encodeRpcCall`: `POST` to `url` with the DSON body. Its headers are `Authorization: Bearer <API_KEY>`, `X-Backplane-Schedule`, `X-Backplane-Run` and `X-Backplane-Attempt`. The app compares the bearer token with its own bot key. Delivery is at least once, so the app should drop a run ID it has already handled. The run stores `{status, result}`, where `result` is the function's return value when it is JSON and null otherwise.
+The payload is the callback's `url` plus the call, `{ v, className, methodName, args }`, which agents read as plain JSON. A payload without `v`, written before defuss-rpc versioned its calls, still runs, and a `v` that defuss-rpc does not know fails `create` with `INVALID_ARGUMENT`. The daemon sends the call with defuss-rpc's `encodeRpcCall`: `POST` to `url` with the DSON body. Its headers are `X-Backplane-Callback`, `X-Backplane-Schedule`, `X-Backplane-Run` and `X-Backplane-Attempt`. `X-Backplane-Callback` is a one-time token: while the call runs, `shopApp.callbacks.verify(token)` returns `{ app, tenant, bucket, schedule, run, attempt }`, and after it, or for another app's key, `NOT_FOUND`. The app refuses a call whose token does not verify. Delivery is at least once, so the app should drop a run ID it has already handled. The run stores `{status, result}`, where `result` is the function's return value when it is JSON and null otherwise.
 
-`url` must use http or https on `127.0.0.1`, `localhost` or `[::1]`, or an origin listed in `BACKPLANE_CALLBACK_ORIGINS`, because the daemon sends its bot key along. A payload that breaks these rules fails `create` or `update` with `INVALID_ARGUMENT`. A call fails after 60 seconds or on a redirect. An answer with status 2xx completes the run. A 4xx answer other than 408 and 429 fails it for good. Other failures retry within the schedule's retry policy. Each failed call logs a `WARN` line to the `_backplane` log. The daemon checks for due callbacks every 250 ms.
+`url` must use http or https on `127.0.0.1`, `localhost` or `[::1]`, or an origin listed in `BACKPLANE_CALLBACK_ORIGINS`, so a key holder cannot make the daemon call any address. A payload that breaks these rules fails `create` or `update` with `INVALID_ARGUMENT`. A call fails after 60 seconds or on a redirect. An answer with status 2xx completes the run. A 4xx answer other than 408 and 429 fails it for good. Other failures retry within the schedule's retry policy. Each failed call logs a `WARN` line to the `_backplane` log. The daemon checks for due callbacks every 250 ms.
 
 ## Files
 
@@ -306,14 +354,16 @@ RPC error bodies carry `{code,error,status}`. The SDK throws `BackplaneError` wi
 | Code | RPC status | Caller action |
 | --- | --- | --- |
 | `INVALID_ARGUMENT` | 400 | Correct the arguments. |
-| `UNAUTHORIZED` | 401 | Send the bot key as a bearer token. |
+| `UNAUTHORIZED` | 401 | Send the root key as `Bearer`, or a live bot key as `ApiKey`. From `auth.authenticate`: the user's credential is unknown, expired or revoked. |
 | `FORBIDDEN` | 403 | Use the loopback URL and port, and send no Origin header. |
 | `NOT_FOUND` | 404 | Check the endpoint path. A download of a missing object, through either file route, or an edit of an unknown schedule also returns this code. An unknown path gets a plain-text `Not Found` from the listener instead of a JSON body. |
 | `METHOD_NOT_ALLOWED` | 405 | Use the method named in the `Allow` header. |
 | `ALREADY_EXISTS` | 409 | Choose a different ID or edit the existing row or schedule. A log batch that fails this way was already stored. |
 | `REVISION_CONFLICT` | 409 | Read the current version before deciding whether to retry. |
+| `RATE_LIMITED` | 429 | Too many failed sign-ins for one account or client. Wait for the window to pass. |
 | `PAYLOAD_TOO_LARGE` | 413 | Keep `/rpc` and `/mcp` requests under 1 MiB. Stream larger files through `/vfs/object`. The daemon reads an oversized body to its end before it answers, so the sender receives this code instead of a broken connection. |
 | `BUSY` | 503 | Retry with backoff. Repeat a scheduler call with the same request ID and arguments. |
+| `UNAVAILABLE` | 503 | Auth is off: set `BACKPLANE_AUTH_MASTER_KEY`. |
 | `COMMIT_UNCERTAIN` | 500 | Inspect the persisted value before issuing another write. Repeat a scheduler call with its original request ID. |
 | `STORAGE_ERROR` | 500 | Inspect the store and filesystem. |
 | `INTERNAL_ERROR` | 500 | Retry once. Report repeated failures with the daemon log. |
@@ -337,7 +387,7 @@ Configure the agent's Streamable HTTP transport with endpoint `http://127.0.0.1:
 
 The file is gitignored and written with mode 600, because it holds the bot key. Entries of other servers stay; linear-clone's `make mcp-config` adds its own entry to the same file. The packed-consumer test connects from a file that `make mcp-config` wrote for its throwaway daemon.
 
-Tool discovery lists the ten cache and document operations, `vfs.put`, `vfs.get`, `vfs.head`, `vfs.list` and `vfs.delete`, and `logs.write` and `logs.read`, and the twelve `scheduler.` management tools, each with its input schema. For example, call `cache.get` with these arguments.
+Tool discovery lists the ten cache and document operations, `vfs.put`, `vfs.get`, `vfs.head`, `vfs.list` and `vfs.delete`, `logs.write` and `logs.read`, the twelve `scheduler.` management tools, and the read-only `auth.status`, `auth.members`, `auth.listApiKeys` and `bots.list`, each with its input schema. For example, call `cache.get` with these arguments.
 
 ```json
 {"scope":{"app":"shop","tenant":"acme","bucket":"catalog"},"key":"currency"}
@@ -383,7 +433,8 @@ The listener stays on 127.0.0.1, so a Prometheus server on another host cannot s
 
 | Setting | Meaning |
 | --- | --- |
-| `API_KEY` | Required bot key. Use printable ASCII without whitespace. Every holder may access every tenant. |
+| `API_KEY` | Required root key. Use printable ASCII without whitespace. Every holder may access every tenant. |
+| `BACKPLANE_AUTH_MASTER_KEY` | Base64url of 32 random bytes, which `make env` and `make setup` write. Unset, auth and bots are off; malformed, startup stops. Back it up with the data root. |
 | `PORT` | Listener port, default 43127. The host is fixed. |
 | `BACKPLANE_DATA_DIR` | Data root, default `./var/data` relative to the daemon working directory. |
 | `BACKPLANE_CALLBACK_ORIGINS` | Comma-separated origins besides loopback, such as `https://app.internal:8443`, that RPC callbacks may call. An entry that is not exactly an origin stops startup. |

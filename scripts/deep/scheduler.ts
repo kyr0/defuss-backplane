@@ -1,7 +1,7 @@
 /** VERIFIED: run through RPC and MCP by scripts/deep/run.ts. The scheduler as the README documents it: schedules with
  * refs, idempotent creates by request ID, paging and ref filters, edits with revisions, pause, resume and remove,
  * histories, runs leased by a worker through claim, renew, fail, retry and complete, every termination target, and an
- * `_rpc` callback with the bot key and the X-Backplane headers. Worker calls exist over RPC only, so both runs lease
+ * `_rpc` callback with a one-time token and the X-Backplane headers. Worker calls exist over RPC only, so both runs lease
  * through RPC and read through the transport under test. */
 import { createServer } from "node:http";
 import { once } from "node:events";
@@ -17,7 +17,7 @@ const record = (s: unknown) => {
 };
 const yearly = "0 0 1 1 *";
 
-export async function schedulerScenario({ ops, rpc, bucket, apiKey, step }: Ctx) {
+export async function schedulerScenario({ ops, rpc, bucket, callbacks, step }: Ctx) {
   const q = ops.scheduler(bucket);
   // The worker calls exist over RPC only, so the shared Ops type leaves them out; the RPC driver forwards them.
   type Report = (request: Record<string, unknown>) => Promise<{ kind: string }>;
@@ -112,15 +112,27 @@ export async function schedulerScenario({ ops, rpc, bucket, apiKey, step }: Ctx)
     assert.equal((await q.runHistory(runId, { limit: 1 })).length, 1);
     assert.equal(await q.getRun("none"), null);
   });
-  await step("an _rpc schedule calls the app's function with the bot key and the X-Backplane headers", async () => {
-    const calls: { args: unknown[]; headers: Record<string, string | undefined> }[] = [];
+  await step("an _rpc schedule calls the app's function with a token valid while it runs and the X-Backplane headers", async () => {
+    const calls: { args: unknown[]; headers: Record<string, string | undefined>; checked: Record<string, unknown> }[] = [];
     let headers: Record<string, string | undefined> = {};
-    const api = { Probe: { ping: async (...args: unknown[]) => calls.push({ args, headers }) } };
+    const api = {
+      Probe: {
+        ping: async (...args: unknown[]) => {
+          const seen = headers;
+          calls.push({ args, headers: seen, checked: await callbacks.verify(seen.callback ?? "") });
+        },
+      },
+    };
     const app = createRpcServer(api);
     const server = createServer(async (req, res) => {
       const chunks: Buffer[] = [];
       for await (const chunk of req) chunks.push(chunk as Buffer);
-      headers = { authorization: req.headers.authorization, schedule: req.headers["x-backplane-schedule"] as string, run: req.headers["x-backplane-run"] as string };
+      headers = {
+        authorization: req.headers.authorization,
+        callback: req.headers["x-backplane-callback"] as string,
+        schedule: req.headers["x-backplane-schedule"] as string,
+        run: req.headers["x-backplane-run"] as string,
+      };
       const answer = await app.fetch(new Request("http://127.0.0.1" + req.url, { method: req.method, headers: req.headers as HeadersInit, body: Buffer.concat(chunks) }));
       res.writeHead(answer.status, Object.fromEntries(answer.headers)).end(Buffer.from(await answer.arrayBuffer()));
     });
@@ -133,7 +145,9 @@ export async function schedulerScenario({ ops, rpc, bucket, apiKey, step }: Ctx)
       for (let i = 0; !calls.length && i < 100; i++) await sleep(100);
       assert.ok(calls.length, "the daemon called back");
       assert.deepEqual(calls[0].args, [bucket]);
-      assert.equal(calls[0].headers.authorization, "Bearer " + apiKey);
+      // The daemon's key never leaves it; the token names the call's scope while the call runs.
+      assert.equal(calls[0].headers.authorization, undefined);
+      assert.deepEqual([calls[0].checked.bucket, calls[0].checked.schedule], [bucket, "cb"]);
       assert.equal(calls[0].headers.schedule, "cb");
       assert.ok(calls[0].headers.run);
     } finally {

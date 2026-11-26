@@ -3,6 +3,7 @@
  * serves, so every handle method is checked against the server's signature; plain defuss-rpc callers use the same type. VERIFIED by probe with 4.1.0: through the process-wide client, a
  * client guard of the application blocked a backplane call. Every failure is a `BackplaneError`. */
 import { createRpcContext } from "defuss-rpc/client";
+import { proxyPlugin } from "defuss-serve/plugins";
 import type { Document, NewDocument } from "defuss-db";
 import type { CacheResult } from "./cache.js";
 import type { InputRow, Query, Row } from "./db.js";
@@ -22,6 +23,8 @@ import { settings } from "./config.js";
 
 import { BackplaneError, statuses, type ErrorCode } from "./errors.js";
 import type { BackplaneApi } from "./api.js";
+import type { Registration } from "./auth.js";
+import type { NewBot } from "./bots.js";
 import type {
   CacheWriteOptions,
   Versioned,
@@ -29,6 +32,10 @@ import type {
 } from "./revisions.js";
 export { BackplaneError };
 export type { BackplaneApi } from "./api.js";
+export type { AuthMode, Member, NewApiKey, Registration } from "./auth.js";
+export type { Bot, NewBot } from "./bots.js";
+export type { CallbackCall } from "./callbacks.js";
+export type { HostPrincipal } from "defuss-auth/host";
 export type { ErrorCode, CacheWriteOptions, Versioned, WriteOptions };
 export type { Scope } from "./scope.js";
 export type {
@@ -95,7 +102,8 @@ export async function connectBackplane(options: {
 }) {
   const { app } = options;
   const { base, apiKey } = settings(options);
-  const authorization = "Bearer " + apiKey;
+  // A bot key from bots.create starts with defuss-auth's `dfa_`; the root API_KEY travels as a bearer token.
+  const authorization = (apiKey.startsWith("dfa_") ? "ApiKey " : "Bearer ") + apiKey;
   /** The daemon's error body `{ code, error }` as a `BackplaneError`. */
   function faultOf(status: number, body: string) {
     let fault: { code?: ErrorCode; error?: string } = {};
@@ -168,10 +176,47 @@ export async function connectBackplane(options: {
   return {
     /** The app's own log, for records that belong to no tenant. */
     logs: () => logs(),
+    auth: {
+      /** Registers the app's user authentication with its public origin. */
+      configure: (registration: Registration) => run(rpc.auth.configure({ app }, registration)),
+      /** Whether auth is on and how the app registered, for debugging; it answers while auth is off. */
+      status: () => run(rpc.auth.status({ app })),
+      /** A defuss-serve plugin for the app's own listener that forwards its browser's `/auth/*` to this daemon, with
+       * this connection's key in `X-Backplane-Key`. It mounts at `/auth` only, because the refresh cookie's path is
+       * `/auth`. */
+      proxy: () => proxyPlugin("/auth", `${base}/apps/${encodeURIComponent(app)}/auth`, { headers: { "X-Backplane-Key": apiKey }, name: "backplane-auth" }),
+    },
+    /** The backplane's bot users, for the root key or an admin bot. */
+    bots: {
+      create: (bot: NewBot) => run(rpc.bots.create(bot)),
+      list: () => run(rpc.bots.list()),
+      rotate: (id: string) => run(rpc.bots.rotate(id)),
+      revoke: (id: string) => run(rpc.bots.revoke(id)),
+    },
+    /** The scheduled call a callback's `X-Backplane-Callback` token belongs to, while that call runs. */
+    callbacks: {
+      verify: (token: string) => run(rpc.callbacks.verify(token)),
+    },
     tenant(tenant: string) {
+      const members = { app, tenant };
       return {
         /** This tenant's log of the app. */
         logs: () => logs(tenant),
+        /** The app's users and API keys in this tenant. */
+        auth: {
+          /** Who sent a request, from its `Authorization` field; fails unless the credential is live in this tenant. */
+          authenticate: (authorization: string, options?: { claims?: string[]; anyClaims?: string[] }) =>
+            run(rpc.auth.authenticate(members, authorization, options)),
+          addMember: (member: { email: string; password?: string; claims?: string[] }) =>
+            run(rpc.auth.addMember(members, member)),
+          removeMember: (subjectId: string) => run(rpc.auth.removeMember(members, subjectId)),
+          setPassword: (subjectId: string, password: string) => run(rpc.auth.setPassword(members, subjectId, password)),
+          createApiKey: (key: { name: string; claims?: string[] }) => run(rpc.auth.createApiKey(members, key)),
+          /** The tenant's members with email, status and claims; pass `next` as `after` for the next page. */
+          members: (page?: { limit?: number; after?: string }) => run(rpc.auth.members(members, page)),
+          listApiKeys: () => run(rpc.auth.listApiKeys(members)),
+          revokeApiKey: (id: string) => run(rpc.auth.revokeApiKey(members, id)),
+        },
         cache(bucket: string) {
           const scope = { app, tenant, bucket };
           return {

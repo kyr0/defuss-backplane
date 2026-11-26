@@ -43,6 +43,10 @@ async function call<T = unknown>(
 }
 try {
   assert.deepEqual((await agent.listTools()).tools.map((t) => t.name).sort(), [
+    "auth.listApiKeys",
+    "auth.members",
+    "auth.status",
+    "bots.list",
     "cache.delete",
     "cache.get",
     "cache.getVersioned",
