@@ -17,7 +17,7 @@ Tick a milestone `- [x]` when its proof passes, then run `verify` on its scope.
 - VERIFIED: the scaffold's script loads one avatar from `https://github.com/kyr0.png` and the others from the documentation site's `images/avatars/`. defuss-shadcn's integration guide, `dist/SKILL.md`, loads Lucide from unpkg. The npm package ships no avatar images.
 - VERIFIED from defuss-dom-router's README: `prepare({ to, signal })` may be asynchronous and runs before history changes. An issue page can therefore load its issue before it shows.
 - VERIFIED from defuss-rpc's README: a server guard gets `(namespace, method, args, request)` and only an explicit `false` answers 403. A function gets only its arguments. `addStreamingUploadHandler` and `addStreamingDownloadHandler` stream files.
-- VERIFIED by `tests/client.test.ts` of the backplane: `defuss-backplane/client` runs each connection on a defuss-rpc 4.3.0 client context, so an application's `addHook()` and `setHeaders()` do not reach backplane calls, and it refuses redirects that would carry the bot key elsewhere.
+- VERIFIED by `tests/client.test.ts` of the backplane: `defuss-backplane/client` runs each connection on a defuss-rpc 4.4.0 client context, so an application's `addHook()` and `setHeaders()` do not reach backplane calls, and it refuses redirects that would carry the bot key elsewhere.
 - VERIFIED: defuss-mcp 0.6.2 exports `defuss-mcp/rpc`. Its README says the `exposeRpc` bridge re-enters the RPC dispatcher, so RPC guards also cover MCP calls.
 - VERIFIED: npm has defuss-backplane 0.2.0 only. The `_rpc` callbacks exist in the repo's unreleased 0.3.0.
 - VERIFIED by probe on Bun 1.4.5, the `mise.toml` pin:
@@ -41,7 +41,7 @@ Tick a milestone `- [x]` when its proof passes, then run `verify` on its scope.
 8. **Jobs are idempotent by construction.** A digest notification has the ID `digest:<date>:<issue>`, and a rollover acts on one cycle ID, so a repeated delivery inserts nothing new. Deduplicating by `X-Backplane-Run` would need the request in the function, which only guards see.
 9. **Callback guard.** A defuss-rpc guard rejects every `Jobs.*` call whose bearer token differs from the backplane key, compared in constant time. The MCP bridge leaves `Jobs` out.
 10. **Schedule upsert.** The callback URL contains the app's port. At startup the app creates each schedule, and if it already exists, updates the schedule whose cron, time zone or payload differ.
-11. **MCP.** `exposeRpc(registry, ({ request }) => rpc.fetch(request), { codec: "json", include })` exposes the app namespaces and leaves `Jobs` out. The bridge takes any route of the form `({ request }) => Promise<Response>`, and a defuss-rpc 4.3.0 instance's `fetch` fits it without an adapter.
+11. **MCP.** `exposeRpc(registry, ({ request }) => rpc.fetch(request), { codec: "json", include })` exposes the app namespaces and leaves `Jobs` out. The bridge takes any route of the form `({ request }) => Promise<Response>`, and a defuss-rpc 4.4.0 instance's `fetch` fits it without an adapter.
     - VERIFIED by probe on 2026-11-25, with defuss-mcp 0.6.2, defuss-rpc 4.3.0 and defuss-serve 0.4.0 driven by the official MCP client. Only the included tool was listed, a call returned its result as JSON, and the RPC guard ran with the MCP request's headers.
     - The app's schema is open, so the bridge needs no `discoveryHeaders`, which defuss-mcp 0.6.2 offers for a guarded schema.
 12. **No third-party requests.** Lucide comes from npm and is bundled. Avatars show initials. The seed keeps the scaffold's names and content.
@@ -92,7 +92,7 @@ flowchart LR
 
 - [x] **M0 Project skeleton.**
   - Run `bun init` in `examples/linear-clone`.
-  - `package.json`: `private`, `type: module`, `packageManager: bun@1.4.5`, the root's `mise.toml` pin, description, MIT, author, exact pins. The backplane already runs defuss-serve 0.4.0, defuss-rpc 4.3.0 and defuss-mcp 0.6.2, and the app pins the same. Since the upstream fixes of 2026-11-25, the app pins defuss-rpc 4.4.0, because it serves uploads; the backplane keeps its upload routes closed and stays on 4.3.0.
+  - `package.json`: `private`, `type: module`, `packageManager: bun@1.4.5`, the root's `mise.toml` pin, description, MIT, author, exact pins. The backplane runs defuss-serve 0.4.0, defuss-rpc 4.4.0 and defuss-mcp 0.6.2, and the app pins the same, so one defuss-rpc copy serves both.
   - Add `tsconfig.json`, `bunfig.toml` with the coverage floor, a `.gitignore` for `var/ tmp/ output/ input/* deps/` and `!input/seed.json`, `.env.example` and a `Makefile` with every VAE verb. `metrics`, `bench` and `e2e` exit 2 as UNKNOWN until their milestones.
   - `src/server/config.ts`: `loadConfig(env)` for the keys of `.env.example`, `PORT`, `BACKPLANE_PORT`, `BACKPLANE_API_KEY`, `WORKSPACE` and `VIEWER`, with `tests/config.test.ts`. Lint needs a source file, and `.env.example` must match the keys the code reads. The default `VIEWER` is `aron`: VERIFIED from the scaffold script, "My issues" lists the rows assigned to `aron`.
   - Add the root rule from decision 4.

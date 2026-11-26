@@ -45,7 +45,7 @@
     "defuss-logs": "0.3.0",
     "defuss-mcp": "0.6.2",
     "defuss-o11y": "0.3.0",
-    "defuss-rpc": "4.3.0",
+    "defuss-rpc": "4.4.0",
     "defuss-scheduler": "0.2.0",
     "defuss-serve": "0.4.0",
     "defuss-vfs": "0.3.0"

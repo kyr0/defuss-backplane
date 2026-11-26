@@ -76,6 +76,10 @@ RULES += [
      "command": "make -C examples/linear-clone setup verify",
      "claim": "the linear-clone example installs from the packed backplane, lints, passes its tests, its coverage floor"
               " and its journey in Chromium, Firefox and WebKit against the built app"},
+    # A frozen install keeps the backplane dependencies the example's lock recorded, even after the root changed them.
+    {"id": "linear-clone.backplane-lock", "kind": "command",
+     "command": "python3 .vae/checks/linear_clone_lock.py",
+     "claim": "the example's bun.lock records the root package.json dependencies for its packed backplane"},
     # The frontend renders JSX through defuss-morph and changes the shell through defuss-query (human requirement).
     {"id": "linear-clone.morph-rendering", "kind": "not_regex", "glob": "examples/linear-clone/src/web/*.ts*",
      "pattern": r"\.(?:innerHTML|outerHTML)\b|insertAdjacent(?:HTML|Element|Text)|\.replaceChildren\(|"

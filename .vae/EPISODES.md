@@ -56,12 +56,6 @@ Wrap: EVERY lead becomes a test | .vae/VERIFY.py rule | one MEMORY line with BC,
 2026-11-25T04:57:07Z s=dcdb118f FINDING examples/linear-clone/Makefile:2 and .env.example (own claim corrected) learn=none: VERIFIED: probe outputs K1..K9 recorded; documentation corrected.
 2026-11-25T05:19:11Z s=dcdb118f FINDING Makefile:test|coverage, package.json:scripts.test (root) learn=none: VERIFIED: bun test ./tests lists no examples/ file.
 2026-11-25T05:19:11Z s=dcdb118f FINDING examples/linear-clone/input/seed.json learn=none: VERIFIED: counts printed by the extraction and checked by the seed test.
-2026-11-25T05:32:54Z s=dcdb118f FAIL linear-clone.verify
-2026-11-25T05:34:36Z s=dcdb118f DONE fp=b82c3015000f cov=98.0% paths=examples/linear-clone/bun.lock,examples/linear-clone/package.json,examples/linear-clone/src/core/faults.ts,examples/linear-clone/src/core/issue.ts(+10)
-2026-11-25T05:34:36Z s=dcdb118f FINDING examples/linear-clone/src/core/faults.ts + src/server/server.ts:withStatus learn=test: VERIFIED: tests/api.test.ts asserts status and code for every method's main error, and the MCP error text.
-2026-11-25T05:34:36Z s=dcdb118f FINDING examples/linear-clone/src/server/server.ts:upload guard (upstream root cause) learn=test: VERIFIED: four consecutive suite runs without the error; defuss-rpc src/upload.test.ts covers the root cause.
-2026-11-25T05:34:36Z s=dcdb118f FINDING examples/linear-clone/src/server/server.ts:download handler learn=test: VERIFIED: tests for 'no-slash' and 'ENG-141/../x' answer 404; five runs pass.
-2026-11-25T05:34:36Z s=dcdb118f FINDING examples/linear-clone/src/server/server.ts:uploadIdOf learn=test: VERIFIED: the round-trip test uploads with uploadIdOf and downloads byte for byte.
 2026-11-25T05:34:36Z s=dcdb118f FINDING examples/linear-clone/src/server/cli.ts learn=test: VERIFIED: tests/cli.test.ts spawns it in a temporary project directory.
 2026-11-25T05:34:36Z s=dcdb118f FINDING examples/linear-clone/src/server/api.ts learn=test: VERIFIED: each method called once through the RPC client, the main error path asserted.
 2026-11-25T05:34:36Z s=dcdb118f FINDING examples/linear-clone/src/server/config.ts:TIME_ZONE learn=test: VERIFIED: config tests.
@@ -106,3 +100,9 @@ Wrap: EVERY lead becomes a test | .vae/VERIFY.py rule | one MEMORY line with BC,
 2026-11-26T05:52:52Z s=dcdb118f FINDING examples/linear-clone/src/server/server.ts:upload guard learn=none: VERIFIED: only comment lines changed (git diff).
 2026-11-26T05:52:52Z s=dcdb118f FINDING .vae/MEMORY.md learn=memory: VERIFIED: grep finds no defuss-morph 0.3.0 pin in the repo after the bump.
 2026-11-26T05:52:52Z s=dcdb118f FINDING plans/2026-11-24_22-24_linear-clone-example.md:95,121,135,164,166 B/P learn=none: VERIFIED: vae.py prose on the page reported findings=0.
+2026-11-26T06:03:00Z s=dcdb118f DONE fp=ccc77317d33f cov=98.0% paths=ARCH.md,CHANGELOG.md,bun.lock,examples/linear-clone/bun.lock(+3)
+2026-11-26T06:03:00Z s=dcdb118f FINDING package.json:dependencies.defuss-rpc learn=none: VERIFIED: git diff c2951b6 17650b1 -- src/server.ts in defuss-rpc; ARCH.md line 45.
+2026-11-26T06:03:00Z s=dcdb118f FINDING examples/linear-clone/bun.lock:defuss-backplane learn=verifier: VERIFIED: probe with the stale lock (frozen install exit 0, nested 4.3.0); rule linear-clone.backplane-lock runs .vae/checks/linear_clone_lock.py, which exits 1
+2026-11-26T06:03:00Z s=dcdb118f FINDING src/client.ts:1 learn=none: VERIFIED: gate test step ran tests/client.test.ts on defuss-rpc 4.4.0.
+2026-11-26T06:03:00Z s=dcdb118f FINDING examples/linear-clone/output/e2e.json learn=none: VERIFIED: gate verify step VERIFIED in this run.
+2026-11-26T06:03:00Z s=dcdb118f FINDING ARCH.md:8,45 CHANGELOG.md:5 plans:20,44,95 B/P learn=none: VERIFIED: vae.py prose on the three pages reported findings=0.

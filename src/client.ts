@@ -1,4 +1,4 @@
-/** VERIFIED: Each connection is a defuss-rpc 4.3.0 client context with the bot key, so the application's `addHook()`
+/** VERIFIED: Each connection is a defuss-rpc 4.4.0 client context with the bot key, so the application's `addHook()`
  * and `setHeaders()` never reach backplane calls. VERIFIED by probe with 4.1.0: through the process-wide client, a
  * client guard of the application blocked a backplane call. Every failure is a `BackplaneError`. */
 import { createRpcContext } from "defuss-rpc/client";
