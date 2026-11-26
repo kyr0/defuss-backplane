@@ -55,13 +55,7 @@ Wrap: EVERY lead becomes a test | .vae/VERIFY.py rule | one MEMORY line with BC,
 2026-11-25T04:57:07Z s=dcdb118f FINDING examples/linear-clone/Makefile recipes (runtime) learn=none: UNKNOWN: whether recipes should run through mise exec; not requested.
 2026-11-25T04:57:07Z s=dcdb118f FINDING examples/linear-clone/Makefile:2 and .env.example (own claim corrected) learn=none: VERIFIED: probe outputs K1..K9 recorded; documentation corrected.
 2026-11-25T05:19:11Z s=dcdb118f FINDING Makefile:test|coverage, package.json:scripts.test (root) learn=none: VERIFIED: bun test ./tests lists no examples/ file.
-2026-11-25T05:19:11Z s=dcdb118f FINDING examples/linear-clone/src/server/workspace.ts:issues.update learn=test: VERIFIED: stale-revision test.
-2026-11-25T05:19:11Z s=dcdb118f FINDING examples/linear-clone/src/server/workspace.ts:seed learn=test: VERIFIED: seed tests, including deletion before a second seed.
-2026-11-25T05:19:11Z s=dcdb118f FINDING examples/linear-clone/src/server/workspace.ts:cycles.stats learn=test: VERIFIED: the test reads the cache through a second client.
-2026-11-25T05:19:11Z s=dcdb118f FINDING examples/linear-clone/src/server/workspace.ts:issues.remove learn=test: VERIFIED: removal test sees events and the attachment gone.
-2026-11-25T05:19:11Z s=dcdb118f FINDING examples/linear-clone/src/server/log.ts:createLog learn=test: VERIFIED: tests/log.test.ts and the workspace log test read the record back.
 2026-11-25T05:19:11Z s=dcdb118f FINDING examples/linear-clone/input/seed.json learn=none: VERIFIED: counts printed by the extraction and checked by the seed test.
-2026-11-25T05:19:11Z s=dcdb118f FINDING examples/linear-clone/tests/helpers/daemon.ts learn=test: VERIFIED: every workspace test runs against it.
 2026-11-25T05:32:54Z s=dcdb118f FAIL linear-clone.verify
 2026-11-25T05:34:36Z s=dcdb118f DONE fp=b82c3015000f cov=98.0% paths=examples/linear-clone/bun.lock,examples/linear-clone/package.json,examples/linear-clone/src/core/faults.ts,examples/linear-clone/src/core/issue.ts(+10)
 2026-11-25T05:34:36Z s=dcdb118f FINDING examples/linear-clone/src/core/faults.ts + src/server/server.ts:withStatus learn=test: VERIFIED: tests/api.test.ts asserts status and code for every method's main error, and the MCP error text.
@@ -106,3 +100,9 @@ Wrap: EVERY lead becomes a test | .vae/VERIFY.py rule | one MEMORY line with BC,
 2026-11-25T06:19:11Z s=dcdb118f FINDING examples/linear-clone/README.md startup claim learn=none: VERIFIED: test names in tests/cli.test.ts.
 2026-11-25T06:19:56Z s=dcdb118f DONE fp=eaf77618e2fe cov=98.0% paths=plans/2026-11-24_22-24_linear-clone-example.md
 2026-11-25T06:19:56Z s=dcdb118f FINDING plans/2026-11-24_22-24_linear-clone-example.md learn=none: VERIFIED: gate verify step VERIFIED in this run.
+2026-11-26T05:52:52Z s=dcdb118f DONE fp=71101b770037 cov=98.0% paths=examples/linear-clone/bun.lock,examples/linear-clone/package.json,examples/linear-clone/scripts/e2e.ts,examples/linear-clone/src/server/server.ts(+1)
+2026-11-26T05:52:52Z s=dcdb118f FINDING examples/linear-clone/package.json learn=none: VERIFIED: node_modules versions read after bun install; scripts/build.ts line 9 reads node_modules/defuss-shadcn/dist.
+2026-11-26T05:52:52Z s=dcdb118f FINDING examples/linear-clone/scripts/e2e.ts:openPage learn=test: VERIFIED: gate e2e output/e2e.json at 2026-11-26T05:52:29Z has 20 of 20 checks passing, with the upload step, and no exception.
+2026-11-26T05:52:52Z s=dcdb118f FINDING examples/linear-clone/src/server/server.ts:upload guard learn=none: VERIFIED: only comment lines changed (git diff).
+2026-11-26T05:52:52Z s=dcdb118f FINDING .vae/MEMORY.md learn=memory: VERIFIED: grep finds no defuss-morph 0.3.0 pin in the repo after the bump.
+2026-11-26T05:52:52Z s=dcdb118f FINDING plans/2026-11-24_22-24_linear-clone-example.md:95,121,135,164,166 B/P learn=none: VERIFIED: vae.py prose on the page reported findings=0.

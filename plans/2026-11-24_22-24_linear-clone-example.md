@@ -92,7 +92,7 @@ flowchart LR
 
 - [x] **M0 Project skeleton.**
   - Run `bun init` in `examples/linear-clone`.
-  - `package.json`: `private`, `type: module`, `packageManager: bun@1.4.5`, the root's `mise.toml` pin, description, MIT, author, exact pins. The backplane already runs defuss-serve 0.4.0, defuss-rpc 4.3.0 and defuss-mcp 0.6.2, and the app pins the same.
+  - `package.json`: `private`, `type: module`, `packageManager: bun@1.4.5`, the root's `mise.toml` pin, description, MIT, author, exact pins. The backplane already runs defuss-serve 0.4.0, defuss-rpc 4.3.0 and defuss-mcp 0.6.2, and the app pins the same. Since the upstream fixes of 2026-11-25, the app pins defuss-rpc 4.4.0, because it serves uploads; the backplane keeps its upload routes closed and stays on 4.3.0.
   - Add `tsconfig.json`, `bunfig.toml` with the coverage floor, a `.gitignore` for `var/ tmp/ output/ input/* deps/` and `!input/seed.json`, `.env.example` and a `Makefile` with every VAE verb. `metrics`, `bench` and `e2e` exit 2 as UNKNOWN until their milestones.
   - `src/server/config.ts`: `loadConfig(env)` for the keys of `.env.example`, `PORT`, `BACKPLANE_PORT`, `BACKPLANE_API_KEY`, `WORKSPACE` and `VIEWER`, with `tests/config.test.ts`. Lint needs a source file, and `.env.example` must match the keys the code reads. The default `VIEWER` is `aron`: VERIFIED from the scaffold script, "My issues" lists the rows assigned to `aron`.
   - Add the root rule from decision 4.
@@ -118,7 +118,7 @@ flowchart LR
   - `src/server/cli.ts`: checks backplane readiness at startup and fails fast with a clear message. It reads `dist/public` and `input/seed.json` from the working directory, as Bun reads `.env`.
   - VERIFIED by probe with defuss-rpc 4.3.0: every thrown error reaches the client as HTTP 500 with `{"error":"Error calling function <m>: <message>"}`. `src/core/faults.ts` therefore puts a code in the message (`NOT_FOUND: …`, `INVALID_INPUT(title): …`), the server rewrites the status from it (400, 404, 409, 413, 503), and the browser reads it back. The MCP bridge reports a failed call as "RPC call rejected (HTTP 404)", so agents see the status.
   - VERIFIED by probe: an upload handler's metadata holds the upload ID and file name but no headers. An upload therefore names its issue in its ID, `<issue>.<uuid>`, and downloads use the ID `<issue>/<name>`.
-  - VERIFIED: a streaming upload handler that threw without reading left defuss-rpc 4.3.0's temp file open, and Bun failed with "A FileHandle object was closed during garbage collection". The guard now refuses a missing issue, a bad name or an announced size above 25 MiB with 403 before the bytes arrive. The root cause is fixed in defuss-rpc 4.3.1 (built locally, not yet on npm); the app moves to it once it is published.
+  - VERIFIED: a streaming upload handler that threw without reading left defuss-rpc 4.3.0's temp file open, and Bun failed with "A FileHandle object was closed during garbage collection". The guard now refuses a missing issue, a bad name or an announced size above 25 MiB with 403 before the bytes arrive. The root cause is fixed in defuss-rpc 4.3.1; the app runs 4.4.0, which contains that fix, and the guard stays because it refuses a file before it is stored.
   - `TIME_ZONE` (default `UTC`) joins the configuration: today, due dates and cycle days follow its calendar.
   - Proof: tests through the real defuss-rpc client and the official MCP client. Every API method is called once, with its main error. `Jobs` is absent from MCP. SIGTERM exits with 0. Each invalid configuration value fails startup.
 - [x] **M4 Schedules.**
@@ -132,7 +132,7 @@ flowchart LR
 - [x] **M5 Frontend shell.**
   - A one-off extraction took the shell and the styles from defuss-shadcn 0.10.1's full-screen page (`docs/application/app-issue-tracker.html`), without the 15 pre-rendered issues, pages, notes, people, projects and other cycles.
   - Correction by the human after the first version, which cloned `<template>` elements and filled them with `innerHTML`, `replaceChildren` and `textContent`: the frontend renders with defuss-morph and changes the DOM with defuss-query. The scaffold's row, card, issue, note, person and project templates became JSX components (`jsxImportSource: "defuss-morph"`); each region is a defuss-morph `reactive()` binding to the store, keyed by issue ID; the shell changes through defuss-query's `attr`, `prop`, `text` and `val`. The gate rule `linear-clone.morph-rendering` rejects hand-written DOM writes in `src/web`.
-  - VERIFIED: defuss-query 0.2.0 declares `defuss-morph ^0.2.0`; Bun installs it next to defuss-morph 0.3.0 (which has the JSX runtime and `reactive()`) as one copy, and the journey passes on it.
+  - VERIFIED: defuss-query 0.2.0 declared `defuss-morph ^0.2.0`, which excluded 0.3. defuss-query 0.2.1 declares `^0.2.0 || ^0.3.0`, and the app runs it with defuss-morph 0.3.1 (which has the JSX runtime and `reactive()`); the journey passes on it.
   - Lucide icons are imported one by one (`src/web/icons.tsx`): the shell gets them once through `createIcons`, rendered regions through `<Icon>`. The bundle shrank from 553 KB to 127 KB, and the e2e fails on a leftover `i[data-lucide]`.
   - VERIFIED: the app bundle has no `file-input`; the build copies `dist/components/file-input/file-input.min.css`, and the plain file input needs no script.
   - `scripts/e2e.ts` runs with Node.js: it deploys `dist/` and the seed into a temporary directory, starts the real backplane and `bun dist/server.js` there, and opens every route in Chromium, Firefox and WebKit without console errors.
@@ -161,9 +161,9 @@ flowchart LR
   - On Firefox and WebKit it runs the smoke from decision 6.
   - It writes `output/e2e.json`.
   - Proof: `make e2e` exits 0, and the file lists every route and browser. VERIFIED: 20 checks pass, 14 Chromium steps and 3 each in Firefox and WebKit.
-  - The page fails on console errors and on any HTTP status of 400 or more, except one: VERIFIED: defuss-rpc 4.3.0's client asks `HEAD /rpc/upload/<id>` before an upload with an `uploadId`, and a fresh ID answers 404 (nothing to resume). The app sends an `uploadId` on every upload because it carries the issue ID.
+  - The page fails on console errors and on any HTTP status of 400 or more. VERIFIED: defuss-rpc 4.3.0's client asks `HEAD /rpc/upload/<id>` before an upload with an `uploadId`, and a fresh ID answered 404 (nothing to resume), which browsers log as an error; the app sends an `uploadId` on every upload because it carries the issue ID. defuss-rpc 4.4.0 answers 200 with `X-Upload-Status: none`, so the e2e allows no exception.
   - VERIFIED: the journey's viewport is 1600 by 900, because at 1280 the board's Done column lies outside the viewport and a drag cannot reach it.
-  - VERIFIED: the scaffold's `.pm-table { display: none }` for the issue table also hid the projects table, which shared the class; the projects table has its own class `pm-projects`.
+  - VERIFIED: the scaffold's `.pm-table { display: none }` for the issue table also hid the projects table, which shared the class; the projects table has its own class `pm-projects`, as in defuss-shadcn 0.10.2's scaffold.
   - `make setup` installs the three browsers with `playwright-core install`, which returns at once when they are present, and the root rule runs the example's `setup verify`.
 - [x] **M8 Operations and docs.**
   - `make start` builds and runs detached, with `tmp/linear-clone.pid` and `var/log/linear-clone.std{out,err}`, and fails if the backplane is not ready. Also `stop`, `status`, `log`, and `metrics`, which reads the backplane's `/metrics` lines with `app="linear-clone"`.

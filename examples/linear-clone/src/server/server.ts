@@ -44,9 +44,9 @@ export async function startServer(config: Config, options: { publicDir: string; 
     createApi({ ws, viewer: config.viewer, workspace: config.workspace, timeZone: config.timeZone, log }),
   );
   // Refuses an attachment before its bytes arrive: too large, for a missing issue, or with a bad file name. Why in the
-  // guard: it runs before the upload is stored, and a streaming handler that throws without reading its stream leaves
-  // defuss-rpc 4.3.0's temp file handle open (VERIFIED: Bun then fails with "A FileHandle object was closed during
-  // garbage collection"). A refused upload answers 403.
+  // guard: it runs before the upload is stored, so a refused file is never spooled. VERIFIED: before defuss-rpc 4.3.1, a
+  // streaming handler that threw without reading its stream also left the temp file handle open, and Bun failed with
+  // "A FileHandle object was closed during garbage collection". A refused upload answers 403.
   rpc.addHook({ phase: "guard", fn: jobsGuard(config.backplaneApiKey) });
   rpc.addHook({
     phase: "guard",

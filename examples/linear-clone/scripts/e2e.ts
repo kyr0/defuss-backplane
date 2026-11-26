@@ -57,18 +57,12 @@ async function openPage(browser: Browser, url: string) {
   // Wide enough that the board's five columns fit: a drag can only drop on a column inside the viewport.
   const page = await browser.newPage({ acceptDownloads: true, viewport: { width: 1600, height: 900 } });
   const errors: string[] = [];
-  // VERIFIED: defuss-rpc 4.3.0's client asks `HEAD /rpc/upload/<id>` before an upload with an `uploadId`, and the
-  // server answers 404 when there is nothing to resume (src/client.ts, "404 => no session to resume"). The app sends
-  // an uploadId on every upload, because it carries the issue ID, so that one 404 is expected; every other is not.
-  const probe = (url: string) => /\/rpc\/upload\/[^/]+$/.test(new URL(url).pathname);
   page.on("console", (m) => {
-    if (m.type() !== "error") return;
-    if (m.text().startsWith("Failed to load resource") && m.location().url && probe(m.location().url)) return;
-    errors.push(m.text());
+    if (m.type() === "error") errors.push(m.text());
   });
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("response", (r) => {
-    if (r.status() < 400 || (r.status() === 404 && r.request().method() === "HEAD" && probe(r.url()))) return;
+    if (r.status() < 400) return;
     errors.push(`HTTP ${r.status()} ${r.request().method()} ${new URL(r.url()).pathname}`);
   });
   await page.goto(url);
