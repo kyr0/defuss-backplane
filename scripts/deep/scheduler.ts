@@ -1,7 +1,7 @@
 /** VERIFIED: run through RPC and MCP by scripts/deep/run.ts. The scheduler as the README documents it: schedules with
  * refs, idempotent creates by request ID, paging and ref filters, edits with revisions, pause, resume and remove,
- * histories, runs leased by a worker through claim, renew, fail, retry and complete, every termination target, and an
- * `_rpc` callback with a one-time token and the X-Backplane headers. Worker calls exist over RPC only, so both runs lease
+ * histories, runs leased by a worker through claim, renew, fail, retry and complete, one-off jobs with a deadline and a
+ * follow-up, every termination target, and an `_rpc` callback with a one-time token and the X-Backplane headers. Worker calls exist over RPC only, so both runs lease
  * through RPC and read through the transport under test. */
 import { createServer } from "node:http";
 import { once } from "node:events";
@@ -154,6 +154,35 @@ export async function schedulerScenario({ ops, rpc, bucket, callbacks, step }: C
       await q.terminate({ schedule: "cb" }, { cause: "callback seen" });
       server.close();
     }
+  });
+  await step("a job runs once: submit replays, a worker completes it, getJob reads it, its follow-up names the cause, and a deadline ends another", async () => {
+    const job = { id: "job-a", handler: "job-" + bucket, payload: { n: 2 }, on: { succeeded: { handler: "note-" + bucket } } };
+    const admitted = await q.submit(job, { requestId: "submit-a" });
+    assert.deepEqual([admitted.jobId, admitted.scheduleId, admitted.state], ["job-a", null, "ready"]);
+    assert.deepEqual(await q.submit(job, { requestId: "submit-a" }), admitted);
+    await rejects(q.submit(job, { requestId: "submit-a-again" }), "ALREADY_EXISTS", 409);
+    const grant = (await worker.claim({ workerId: "w", sessionId: "jobs", slot: 0, sequence: 1, requestId: "job-claim", handlers: ["job-" + bucket] })) as {
+      kind: string;
+      lease: unknown;
+    };
+    assert.equal(grant.kind, "granted");
+    assert.equal((await worker.complete({ lease: grant.lease, requestId: "job-done", result: { n: 4 } })).kind, "applied");
+    const done = (await q.getJob("job-a"))!;
+    assert.deepEqual([done.state, done.result], ["succeeded", { n: 4 }]);
+    assert.equal(await q.getJob("absent"), null);
+    const note = (await q.listRuns({ limit: 500 })).items.find((r) => (r.cause as Record<string, unknown> | null)?.job === "job-a");
+    assert.deepEqual([note?.handler, note?.cause], ["note-" + bucket, { job: "job-a", run: done.id, state: "succeeded" }]);
+    // No worker serves the follow-up here, so it ends by its run ID, the one target that reaches follow-ups.
+    assert.equal((await q.terminate({ run: note!.id as string }, { cause: "suite" })).runs, 1);
+    await q.submit({ id: "job-late", handler: "never-" + bucket, timeoutMs: 100 }, { requestId: "submit-late" });
+    let late: Record<string, unknown> | null = null;
+    for (let i = 0; i < 50 && late?.state !== "timedOut"; i++) {
+      await sleep(100);
+      late = await q.getJob("job-late");
+    }
+    assert.equal(late?.state, "timedOut");
+    await q.submit({ id: "job-stop", handler: "never-" + bucket }, { requestId: "submit-stop" });
+    assert.deepEqual(await q.terminate({ job: "job-stop" }, { cause: "not needed" }), { schedules: 0, runs: 1 });
   });
   await step("terminate stops one run, one schedule, a ref and everything, and records the cause", async () => {
     await q.create({ id: "e", handler: "idle-" + bucket, cron: "* * * * * *" }, { requestId: "create-e" });

@@ -241,8 +241,9 @@ export async function connectBackplane(options: {
             query: (request: Query = {}) => run(rpc.db.query(scope, request)) as Promise<{ rows: Partial<T>[] }>,
           };
         },
-        /** One scheduler queue. It is also a defuss-scheduler WorkerPort, so `startWorker` accepts it. A schedule with
-         * handler `_rpc` needs no worker: the daemon calls the app's RPC function named in its payload. */
+        /** One scheduler queue. It is also a defuss-scheduler WorkerPort, so `startWorker` accepts it, in this process
+         * or in any other that holds the app's key. A schedule, job or follow-up with handler `_rpc` needs no worker:
+         * the daemon calls the app's RPC function named in its payload. */
         scheduler(bucket: string): Queue {
           const scope = { app, tenant, bucket };
           const method =
@@ -253,6 +254,8 @@ export async function connectBackplane(options: {
               );
           return {
             create: method("create"),
+            submit: method("submit"),
+            getJob: method("getJob"),
             get: method("get"),
             list: method("list"),
             update: method("update"),

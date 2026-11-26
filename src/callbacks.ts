@@ -34,8 +34,19 @@ const CONCURRENCY = 4;
 // every minute or more often keeps its worker.
 const IDLE_MS = 60_000;
 
-/** What `callbacks.verify` tells the app about the call that carries a token. */
-export type CallbackCall = { app: string; tenant: string; bucket: string; schedule: string; run: string; attempt: number };
+/** What `callbacks.verify` tells the app about the call that carries a token. `schedule` is set for an occurrence,
+ * `job` for a job, and `cause` for a follow-up: the job, run and ending that admitted it, as the daemon recorded them,
+ * so the app can trust it. */
+export type CallbackCall = {
+  app: string;
+  tenant: string;
+  bucket: string;
+  schedule: string | null;
+  job: string | null;
+  cause: Run["cause"];
+  run: string;
+  attempt: number;
+};
 
 /** The tokens of the calls in flight. The RPC module and the dispatcher share one registry. */
 export function callbackTokens() {
@@ -131,6 +142,8 @@ export function startCallbacks(
       tenant: scope.tenant,
       bucket: scope.bucket,
       schedule: run.scheduleId,
+      job: run.jobId,
+      cause: run.cause,
       run: run.id,
       attempt: run.attempt,
     });
@@ -155,7 +168,9 @@ export function startCallbacks(
         ...request.headers,
         "x-backplane-callback": token,
         // Delivery is at least once: the app drops a repeated run ID.
-        "x-backplane-schedule": run.scheduleId,
+        ...(run.scheduleId !== null && { "x-backplane-schedule": run.scheduleId }),
+        // A follow-up names the job whose ending it reports.
+        ...((run.jobId ?? run.cause?.job) != null && { "x-backplane-job": (run.jobId ?? run.cause?.job)! }),
         "x-backplane-run": run.id,
         "x-backplane-attempt": String(run.attempt),
       },
@@ -214,7 +229,7 @@ export function startCallbacks(
             } catch (error) {
               outcome = error instanceof PermanentFailure ? "rejected" : "failed";
               options.warn(
-                `callback failed app=${JSON.stringify(scope.app)} schedule=${JSON.stringify(run.scheduleId)} run=${run.id} attempt=${run.attempt} error=${JSON.stringify(reason(error))}`,
+                `callback failed app=${JSON.stringify(scope.app)} schedule=${JSON.stringify(run.scheduleId)} job=${JSON.stringify(run.jobId ?? run.cause?.job ?? null)} run=${run.id} attempt=${run.attempt} error=${JSON.stringify(reason(error))}`,
               );
               throw error;
             } finally {

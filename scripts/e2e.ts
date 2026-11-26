@@ -36,6 +36,8 @@ const consumerScripts = [
   "consumer-mcp.ts",
   "consumer-equivalence.ts",
   "consumer-auth.ts",
+  "consumer-jobs.ts",
+  "consumer-pool.ts",
   ...["run", "drivers", "kit", "auth", "cache", "db", "logs", "scheduler", "vfs", "http", "big", "video"].map((m) => `deep/${m}.ts`),
 ];
 const bot = randomBytes(32).toString("hex");
@@ -237,6 +239,9 @@ async function runPhase(
     // Auth and bot users through a defuss-serve proxy, on each daemon runtime.
     const authed = await exec(peer, ["consumer-auth.ts", phase], { cwd: tmp, env, timeout: 60000 });
     observed.push({ daemon: runtime, ...JSON.parse(authed.stdout.trim()) });
+    // Jobs pulled by a Node.js and a Bun worker process with the app's bot key, with a hook per ending.
+    const jobs = await exec(runtime, ["consumer-jobs.ts", phase], { cwd: tmp, env, timeout: 90000 });
+    observed.push({ daemon: runtime, ...JSON.parse(jobs.stdout.trim().split("\n").at(-1) ?? "{}") });
     // The deep suite once, against this Node.js daemon, whose pid bounds its memory during the 512 MiB transfer.
     if (phase === "node-first") {
       const deep = await exec(
@@ -301,6 +306,8 @@ try {
         "@modelcontextprotocol/client": "2.4.0",
         "playwright-core": "1.65.1",
         "defuss-serve": "0.5.0",
+        "defuss-scheduler": "0.3.0",
+        "defuss-multicore": "0.1.1",
       },
     }),
   );

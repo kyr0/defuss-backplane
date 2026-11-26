@@ -80,7 +80,7 @@ async function checkCallback() {
 }
 try {
   const tools = (await agent.listTools()).tools;
-  assert.equal(tools.length, 33);
+  assert.equal(tools.length, 35);
   if (mode === "scheduler-write") {
     const created = await queue.create(
       { id: "one", handler: "rollup", cron: "* * * * * *", retry: { baseMs: 0 } },

@@ -28,7 +28,7 @@ test("schedules are shared by RPC and MCP, and the client queue runs a worker", 
   }
   try {
     const listed = (await agent.listTools()).tools;
-    expect(listed).toHaveLength(33);
+    expect(listed).toHaveLength(35);
     const hints = Object.fromEntries(
       listed
         .filter((t) => t.name.startsWith("scheduler."))
@@ -39,6 +39,8 @@ test("schedules are shared by RPC and MCP, and the client queue runs a worker", 
     );
     expect(hints).toEqual({
       create: [false, false],
+      submit: [false, false],
+      getJob: [true, false],
       get: [true, false],
       list: [true, false],
       update: [false, true],

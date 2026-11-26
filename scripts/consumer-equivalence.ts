@@ -38,7 +38,7 @@ async function viaRpc(call: () => Promise<unknown>): Promise<Outcome> {
 }
 /** The value as JSON carries it: dates become ISO strings, undefined fields vanish. */
 const json = (o: Outcome): Outcome => JSON.parse(JSON.stringify(o));
-const VOLATILE = new Set(["id", "key", "revision", "modifiedAt", "createdAt", "updatedAt", "nextDue", "lastProcessed", "lastSkipped", "requestId", "mtimeMs"]);
+const VOLATILE = new Set(["id", "jobId", "key", "revision", "modifiedAt", "createdAt", "updatedAt", "nextDue", "lastProcessed", "lastSkipped", "requestId", "mtimeMs"]);
 function mask(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(mask);
   if (value === null || typeof value !== "object") return value;
@@ -154,6 +154,12 @@ try {
   await read("scheduler.listRuns", {}, () => queue.listRuns());
   await read("scheduler.getRun", { id: "none" }, () => queue.getRun("none"));
   await read("scheduler.runHistory", { id: "none" }, () => queue.runHistory("none"));
+  // Twin jobs with a fixed start, so only their IDs and stamps differ.
+  const later = Date.UTC(2100, 0, 1);
+  await write("scheduler.submit", { job: { id: "m-job", handler: "twin-job", availableAt: later }, options: { requestId: "m-job" } }, () =>
+    queue.submit({ id: "r-job", handler: "twin-job", availableAt: later }, { requestId: "r-job" }),
+  );
+  for (const id of ["m-job", "r-job"]) await read("scheduler.getJob", { id }, () => queue.getJob(id));
   // Auth's read-only tools, on an app registered over RPC with one member and one agent key.
   const app = await connectBackplane({ app: scope.app });
   await app.auth.configure({ origin: "http://127.0.0.1:1" });

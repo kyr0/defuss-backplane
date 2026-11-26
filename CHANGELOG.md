@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+Added one-off jobs on defuss-scheduler 0.3.0: `scheduler(bucket).submit(job)` and `getJob(id)` over RPC, and the MCP tools `scheduler.submit` and `scheduler.getJob`. A job can have a deadline and a follow-up per ending. A follow-up with handler `_rpc` calls the app's RPC function, a hook, and its callback token's `verify` answer carries the `cause`. `CallbackCall` gained `job` and `cause`, and its `schedule` is null for jobs. Callbacks for jobs send `X-Backplane-Job` and no `X-Backplane-Schedule`.
+
 Added user and API key authentication for apps on [defuss-auth](https://github.com/kyr0/defuss-auth) 0.2.0. Each app gets its own authority in `<data root>/auth/<app>`, registered with `auth.configure` and reopened at startup. The app forwards its browser's `/auth/*` routes to `/apps/<app>/auth/*` with its key in `X-Backplane-Key`, and asks `auth.authenticate` who sent each call. `auth.addMember`, `removeMember`, `setPassword`, `createApiKey`, `listApiKeys` and `revokeApiKey` manage accounts without email. Auth needs `BACKPLANE_AUTH_MASTER_KEY`, which `make env` now writes; without it the methods answer `UNAVAILABLE`.
 
 Added bot users. `bots.create` makes a key (`Authorization: ApiKey <key>`) that reaches only the apps it names, or every app with `admin`, over RPC, MCP, `/vfs/object` and `/files`. The `API_KEY` from `.env` stays the root key. Bots live in the reserved `_backplane` app, apart from every app's users. On `/metrics`, a bot sees only its apps' lines and those that name no app.

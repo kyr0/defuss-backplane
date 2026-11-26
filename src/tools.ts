@@ -109,8 +109,8 @@ const query = {
 };
 
 /** Each tool call goes to `rpc`, the daemon's own RPC server, so both protocols share one dispatcher and its faults.
- * The twelve scheduler tools manage schedules. Workers use RPC, so claim, renew, complete and fail have no tool. The
- * four auth tools only read. */
+ * The fourteen scheduler tools manage schedules and jobs. Workers use RPC, so claim, renew, complete and fail have no
+ * tool. The four auth tools only read. */
 export function makeTools(rpc: Pick<RpcServer, "fetch">) {
   const compile = ajvValidator();
   const tools = createMcpApi(
@@ -156,6 +156,7 @@ export function makeTools(rpc: Pick<RpcServer, "fetch">) {
       "status",
       "members",
       "listApiKeys",
+      "getJob",
     ].includes(method);
     // Cache values, documents and log arguments can hold native values. VFS metadata and scheduler records are JSON,
     // so they need no DSON.
@@ -559,6 +560,23 @@ function schedulerTools(
     },
     ["options"],
   );
+  tool(
+    "scheduler.submit",
+    "Queue a one-off job under an ID of your own: a handler, a JSON payload and optionally ref, availableAt, timeoutMs (a deadline after which it ends as timedOut), retry, capabilities, concurrencyKey and on, a follow-up job per ending (succeeded, dead, timedOut, terminated). With handler _rpc the daemon calls an app's RPC function, for the job or a follow-up: the payload is {url, className, methodName, args}.",
+    {
+      job: object,
+      options: {
+        type: "object",
+        properties: { requestId: text },
+        required: ["requestId"],
+        additionalProperties: false,
+      },
+    },
+    ["options"],
+  );
+  tool("scheduler.getJob", "Read one job by its ID: state, attempt, last error and result. A missing ID returns null.", {
+    id: text,
+  });
   tool("scheduler.get", "Read one schedule. A missing ID returns null.", {
     id: text,
   });
@@ -612,12 +630,13 @@ function schedulerTools(
   );
   tool(
     "scheduler.terminate",
-    "Stop work at once and record why. Unlike pause and remove it does not wait for due occurrences. Schedules and unfinished runs, running ones included, end as terminated with the cause.",
+    "Stop work at once and record why. Unlike pause and remove it does not wait for due occurrences. Schedules, unfinished runs and jobs, running ones included, end as terminated with the cause. Follow-ups end only by their run ID.",
     {
       target: {
         type: "object",
         properties: {
           run: text,
+          job: text,
           schedule: text,
           ref: text,
           all: { const: true },
@@ -626,7 +645,7 @@ function schedulerTools(
         maxProperties: 1,
         additionalProperties: false,
         description:
-          "Exactly one of: run (one run ID), schedule (one schedule and its runs), ref (every schedule carrying it), all (the whole scope).",
+          "Exactly one of: run (one run ID, a follow-up included), job (one job ID), schedule (one schedule and its runs), ref (every schedule and job carrying it), all (the whole scope but its follow-ups).",
       },
       options: {
         type: "object",

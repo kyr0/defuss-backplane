@@ -1,12 +1,14 @@
 /** VERIFIED: RPC and MCP reach one defuss-scheduler authority through these methods, which take the scope first like
  * the cache, db and vfs services. */
-import type { Definition, Patch, Queue, Scheduler } from "defuss-scheduler";
+import type { Definition, Job, Patch, Queue, Scheduler } from "defuss-scheduler";
 import { callback, RPC_HANDLER } from "./callbacks.js";
 import { checkedScope, type Scope } from "./scope.js";
 
 /** Every queue method. The record type fails the build if defuss-scheduler adds or removes one. */
 const methods: Record<keyof Queue, true> = {
   create: true,
+  submit: true,
+  getJob: true,
   get: true,
   list: true,
   update: true,
@@ -36,8 +38,9 @@ function handler(name: unknown) {
     throw new TypeError("Handler names starting with _ are reserved; use _rpc for an RPC callback");
 }
 
-/** Every queue method, with `_rpc` payloads checked when a schedule is created or changed, so a callback the daemon
- * would refuse fails at once instead of at its first occurrence. `origins` are the operator's callback origins. */
+/** Every queue method, with `_rpc` payloads checked when a schedule is created or changed and when a job is submitted,
+ * its follow-ups included, so a callback the daemon would refuse fails at once instead of when it is due. `origins`
+ * are the operator's callback origins. */
 export function schedulerApi(owner: Scheduler, origins: ReadonlySet<string>) {
   const api = Object.fromEntries(
     Object.keys(methods).map((name) => [
@@ -57,6 +60,15 @@ export function schedulerApi(owner: Scheduler, origins: ReadonlySet<string>) {
       handler(definition?.handler);
       if (definition?.handler === RPC_HANDLER) callback(definition.payload, origins);
       return api.create(scope, definition, ...rest);
+    },
+    submit(scope, job: Job, ...rest) {
+      handler(job?.handler);
+      if (job?.handler === RPC_HANDLER) callback(job.payload, origins);
+      for (const next of Object.values(job?.on ?? {})) {
+        handler(next?.handler);
+        if (next?.handler === RPC_HANDLER) callback(next.payload, origins);
+      }
+      return api.submit(scope, job, ...rest);
     },
     async update(scope, id, patch: Patch, change) {
       handler(patch?.handler);

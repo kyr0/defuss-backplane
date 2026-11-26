@@ -39,7 +39,7 @@ Tick a milestone `- [x]` when its proof passes, then run `verify` on its scope.
 
 ### defuss-scheduler 0.3.0
 
-- [ ] S1 `src/types.ts:Queue.submit(job, options?)` and `src/types.ts:Job`. A job is a run without a schedule:
+- [x] S1 `src/types.ts:Queue.submit(job, options?)` and `src/types.ts:Job`. A job is a run without a schedule:
   - fields `id`, `ref?`, `handler`, `payload`, `retry?`, `capabilities?`, `concurrencyKey?`, `availableAt?`, `timeoutMs?` and `then?`;
   - `requestId` replay works as for `create`;
   - `Run.scheduleId` becomes `string | null`, and `Run` gains `jobId` and `deadline`;
@@ -47,32 +47,32 @@ Tick a milestone `- [x]` when its proof passes, then run `verify` on its scope.
   - `terminate({ job })` and `terminate({ ref })` cover jobs;
   - `listRuns({ ref })` finds them.
   Proof: tests against a real store cover submission, idempotent replay, a duplicate ID failing with `ALREADY_EXISTS`, a claim granting the job, `complete` storing the result for `getRun`, retries until `dead`, and the payload and `maxPending` limits. Why-doc: why a job is a run without a schedule, rather than a schedule that fires once.
-- [ ] S2 deadline. A deadline index, built like `keys.expiry`, lets `tick` end unfinished jobs past `deadline` as `timedOut`. A renewal after the deadline answers `stale`, so the handler's signal aborts. Proof: a test where a real worker with a slow handler sees its job end as `timedOut`, with `ctx.signal` aborted and its late `complete` ignored.
-- [ ] S3 `then` follow-ups, admitted in the same transaction by `settle`, by the deadline ending and by `terminateRun`. The follow-up's `Run.cause` is `{ job, state }`. A `then` inside a follow-up is refused at submission. Proof: tests for each of the four endings, for a crash between ending and admission (the authority reopened from the same directory shows both or neither), and for a follow-up `then` being refused.
-- [ ] S4 `src/worker.ts:poolHandlers`. Proof: a test runs a real defuss-multicore pool, a devDependency, under `startWorker` on Node and on Bun. It covers a result, a thrown error becoming a failed attempt, and abort on terminate stopping the thread. HYPOTHESIS: the pool's `worker_threads` run under Bun; falsifier=the Bun run of that test.
-- [ ] S5 docs: README "Jobs" section, docs/API.md (`submit`, `timedOut`, `then`, `cause`), docs/WORKERS.md (`poolHandlers`), CHANGELOG. `Run.scheduleId` being nullable is a breaking type change; it ships in 0.3.0 and the CHANGELOG states it. Proof: `make verify`; prose findings=0.
-- [ ] S6 the human publishes 0.3.0; wait for npm (MEMORY: `npm view defuss-scheduler@0.3.0 version` refreshes the cache).
+- [x] S2 deadline. A deadline index, built like `keys.expiry`, lets `tick` end unfinished jobs past `deadline` as `timedOut`. A renewal after the deadline answers `stale`, so the handler's signal aborts. Proof: a test where a real worker with a slow handler sees its job end as `timedOut`, with `ctx.signal` aborted and its late `complete` ignored.
+- [x] S3 `then` follow-ups, admitted in the same transaction by `settle`, by the deadline ending and by `terminateRun`. The follow-up's `Run.cause` is `{ job, state }`. A `then` inside a follow-up is refused at submission. Proof: tests for each of the four endings, for a crash between ending and admission (the authority reopened from the same directory shows both or neither), and for a follow-up `then` being refused.
+- [x] S4 `src/worker.ts:poolHandlers`. Proof: a test runs a real defuss-multicore pool, a devDependency, under `startWorker` on Node and on Bun. It covers a result, a thrown error becoming a failed attempt, and abort on terminate stopping the thread. HYPOTHESIS: the pool's `worker_threads` run under Bun; falsifier=the Bun run of that test.
+- [x] S5 docs: README "Jobs" section, docs/API.md (`submit`, `timedOut`, `then`, `cause`), docs/WORKERS.md (`poolHandlers`), CHANGELOG. `Run.scheduleId` being nullable is a breaking type change; it ships in 0.3.0 and the CHANGELOG states it. Proof: `make verify`; prose findings=0.
+- [x] S6 the human publishes 0.3.0; wait for npm (MEMORY: `npm view defuss-scheduler@0.3.0 version` refreshes the cache).
 
 ### defuss-backplane (after S6)
 
-- [ ] B1 `src/scheduler.ts`.
+- [x] B1 `src/scheduler.ts`.
   - `methods` gains `submit`; the `Record<keyof Queue, true>` already fails the build until it does.
   - `schedulerApi.submit` applies the `_` handler rule to the job and to each `then` entry, and checks every `_rpc` payload with `callback(payload, origins)` at submission.
   Proof: tests/scheduler tests cover a refused `_x` handler, a bad `_rpc` hook URL refused at submission, and a bot submitting only into its own app.
-- [ ] B2 `src/callbacks.ts`. The `_rpc` dispatcher also serves follow-ups. `CallbackCall` gains `job?` and `cause?`, and `callbacks.verify` returns them. Proof: tests/callbacks.test.ts delivers a hook for each ending to a real defuss-rpc server; the server verifies its token and reads `cause`.
-- [ ] B3 `src/client.ts`.
+- [x] B2 `src/callbacks.ts`. The `_rpc` dispatcher also serves follow-ups. `CallbackCall` gains `job?` and `cause?`, and `callbacks.verify` returns them. Proof: tests/callbacks.test.ts delivers a hook for each ending to a real defuss-rpc server; the server verifies its token and reads `cause`.
+- [x] B3 `src/client.ts`.
   - The queue handle's `submit` is typed.
   - `rpcHook(url, call)` returns `{ handler: "_rpc", payload: { url, ...call } }`. VERIFIED: src/client.ts has no `_rpc` helper yet; schedules spread the call into the payload by hand, and they could use this one too.
   - README example: `submit({ id, handler: "render", payload, timeoutMs, then: { succeeded: rpcHook(url, calls.Renders.done(id)), dead: …, timedOut: … } })`.
-- [ ] B4 `src/tools.ts:schedulerTools` gains `scheduler.submit`, for an agent that queues work. The tool count text goes from twelve to thirteen.
-- [ ] B5 proof of the workflow in the packed e2e. scripts/consumer-jobs.ts runs:
+- [x] B4 `src/tools.ts:schedulerTools` gains `scheduler.submit`, for an agent that queues work. The tool count text goes from twelve to thirteen.
+- [x] B5 proof of the workflow in the packed e2e. scripts/consumer-jobs.ts runs:
   - two worker processes with the app's bot key, each running `startWorker(queue, { concurrency: 2, handlers: poolHandlers(pool, ["render"]) })` on a real defuss-multicore pool;
   - 20 submitted jobs, which both processes pull;
   - one job that throws permanently, one past its deadline and one terminated, each delivering its hook to a consumer RPC server that verifies the token;
   - `getRun` showing every result.
   The deep suite drives `submit` over RPC and MCP, so the coverage check finds no unused method.
-- [ ] B6 load. HYPOTHESIS: idle slots poll `claim` every 250 ms plus jitter, so 200 idle slots cost the daemon about 800 empty RPC calls per second, which stays within one core. Falsifier: `make bench` gains a case with 200 idle slots over RPC and records the daemon's CPU. If the cost is too high, plan a long-poll `claim` separately.
-- [ ] B7 docs: README (jobs, hooks, workers in threads and processes, `cause`), ARCH (why follow-ups live in the scheduler, the hook trust path, D6), CHANGELOG. Proof: the gate.
+- [x] B6 load. HYPOTHESIS: idle slots poll `claim` every 250 ms plus jitter, so 200 idle slots cost the daemon about 800 empty RPC calls per second, which stays within one core. Falsifier: `make bench` gains a case with 200 idle slots over RPC and records the daemon's CPU. If the cost is too high, plan a long-poll `claim` separately.
+- [x] B7 docs: README (jobs, hooks, workers in threads and processes, `cause`), ARCH (why follow-ups live in the scheduler, the hook trust path, D6), CHANGELOG. Proof: the gate.
 
 ## Out of scope
 
@@ -85,3 +85,17 @@ Tick a milestone `- [x]` when its proof passes, then run `verify` on its scope.
 ## Risk
 
 `Run.scheduleId: string | null` breaks consumers that read it as a string. Within this workspace that is only the backplane's `src/callbacks.ts`, whose B2 change covers it.
+
+## Results (2026-11-26)
+
+- The human approved the plan's decisions D1 to D6 on 2026-11-26.
+- VERIFIED: S1 to S5 are done in ../defuss-scheduler as 0.3.0. Its gate passed: 22 tests, and the packed e2e on Node.js, Bun, Chromium, Firefox and WebKit. The human published 0.3.0 (S6).
+- VERIFIED: B1 to B7 are done, on defuss-scheduler 0.3.0 from npm. 64 unit tests pass. The packed e2e ran consumer-jobs.ts on all three daemon phases: 23 jobs and 23 hooks each, with the Node.js and Bun worker processes sharing the work. The deep suite passed 108 steps without gaps after one fix: the MCP schema of `scheduler.terminate` lacked `job`.
+- VERIFIED: B6's hypothesis held. 200 idle slots sent 714 empty claims per second and cost the daemon 2.0 s of CPU in 10 s. A long-poll claim is not needed.
+- Changes from the plan:
+  - The field is `on`, not `then`: oxlint refuses a `then` field, and a promise check that only tests for it would misread a record.
+  - A job ID is free again once retention collects its record. Reserving it forever would keep one record per job ever submitted.
+  - A stop of the whole scope never ends follow-ups, so termination notices survive it; `terminate({ run })` ends one.
+  - No `rpcHook` helper: the README's `{ url, ...calls.X.y(args) }` already gives hooks the type check.
+- VERIFIED by probe, found on the way: under Bun 1.4.5, a defuss-multicore 0.1.0 pool on `node:worker_threads` never answers. `expose()` listened on `self`, but Bun delivers the parent's messages there only to `parentPort`. The fix shipped as defuss-multicore 0.1.1, with a Bun regression test, and the packed consumer runs its pools on `node:worker_threads` under both runtimes.
+

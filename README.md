@@ -64,7 +64,7 @@ An app service connects once and then uses any of these services in any tenant. 
 | Documents | `acme.db(bucket)` | Documents with generated or own IDs. Queries filter, sort, page and project, up to 1,000 rows each. | [Backend API](#backend-api) |
 | Files | `acme.vfs(bucket)` | Files under path keys, of any size. Calls carry up to 1 MiB, and `upload` and `download` stream larger files. `/files` serves byte ranges, so a media player can seek. | [Files](#files) |
 | Logs | `shopApp.logs()` for the app, `acme.logs()` for the tenant | One log for the app and one per tenant, filtered by level and time. A [defuss-logs](https://github.com/kyr0/defuss-logs) logger writes into them in batches. | [Logs](#logs) |
-| Scheduler | `acme.scheduler(bucket)` | Cron schedules with time zones, retries and run history. At each run the daemon calls one of your RPC functions, or a worker of yours takes the run. | [Scheduling](#scheduling) |
+| Scheduler | `acme.scheduler(bucket)` | Cron schedules with time zones, retries and run history, and one-off jobs with deadlines and a hook per ending. At each run the daemon calls one of your RPC functions, or a worker of yours takes the run. | [Scheduling](#scheduling) |
 | Auth | `shopApp.auth` to register, `acme.auth` per tenant | Your app's users, who sign in with email and password, and API keys for agents. Each call to your app is checked against live state. | [Authentication](#authentication) |
 
 Cache, documents and files take a revision on writes, so two writers cannot overwrite each other unnoticed ([Conditional writes](#conditional-writes)). Over RPC, cache values, documents and log arguments keep native types such as dates, binary data and bigints. Scheduler payloads and results are JSON.
@@ -262,12 +262,47 @@ process.once("SIGTERM", () => void worker.stop());
 | Operations | Reached through | Purpose |
 | --- | --- | --- |
 | `create`, `get`, `list`, `update`, `pause`, `resume`, `remove` | RPC and MCP | Manage schedules. A definition can carry a `ref`, a name several schedules share, and `list` and `listRuns` filter by it. |
+| `submit`, `getJob` | RPC and MCP | Queue a one-off job and read it by its ID, with its state, attempt, error and result. |
 | `getRun`, `listRuns` | RPC and MCP | Read runs with their state, attempt, error, result and timestamps. |
 | `scheduleHistory`, `runHistory` | RPC and MCP | List every definition and state a schedule had, and every status a run went through, newest first. A run's history is erased with the run when its retention ends. |
-| `terminate` | RPC and MCP | Stop one run, one schedule, every schedule with a ref or the whole bucket at once, and record the cause on each. |
+| `terminate` | RPC and MCP | Stop one run, one job, one schedule, everything with a ref or the whole bucket at once, and record the cause on each. |
 | `claim`, `renew`, `complete`, `fail` | RPC only | Lease runs and report on them. `startWorker` calls these. |
 
 Edits take `change: { revision, requestId }`. A stale revision fails with `REVISION_CONFLICT`, an ID already in use with `ALREADY_EXISTS`, and an edit of an unknown schedule with `NOT_FOUND`. After an ambiguous response, repeat the call with the same request ID and arguments. Payloads and results are JSON. The [defuss-scheduler](https://github.com/kyr0/defuss-scheduler) documentation covers cron syntax, time zones, retries and worker shutdown. Install [defuss-scheduler](https://github.com/kyr0/defuss-scheduler) in the worker's application to import `startWorker`. Handler names starting with `_` belong to the daemon: a schedule cannot use one other than `_rpc`, and a worker cannot claim them.
+
+### Jobs
+
+A job is work to be done once, without a cron, under an ID of the app's. Any process that holds the app's bot key pulls jobs with `startWorker`, so an app scales its work across processes and containers on the daemon's host. `poolHandlers` from defuss-scheduler runs each job in a worker thread of a [defuss-multicore](https://github.com/kyr0/defuss-multicore) pool, off the event loop that renews the lease. Each ending, `succeeded`, `dead`, `timedOut` or `terminated`, can admit a follow-up job; with handler `_rpc` it calls one of the app's RPC functions, a hook.
+
+```ts
+import { Worker } from "node:worker_threads";
+import { createPool } from "defuss-multicore";
+import { poolHandlers, startWorker } from "defuss-scheduler/worker";
+import { rpcCalls } from "defuss-rpc/client";
+import type { RpcApi } from "./api.ts";
+
+const renders = (await connectBackplane({ app: "shop", apiKey: process.env.BOT_KEY })).tenant("acme").scheduler("render");
+const calls = rpcCalls<RpcApi>();
+const hook = (job: string) => ({ handler: "_rpc", payload: { url: "http://127.0.0.1:3000/rpc", ...calls.Renders.ended(job) } });
+await renders.submit({
+  id: "page-42",
+  handler: "render",
+  payload: { page: 42 },
+  timeoutMs: 600_000,
+  on: { succeeded: hook("page-42"), dead: hook("page-42"), timedOut: hook("page-42") },
+});
+
+// In each worker process:
+const pool = createPool({ worker: () => new Worker(new URL("./render-tasks.js", import.meta.url)), maxWorkers: 4 });
+startWorker(renders, { workerId: "render-1", concurrency: 4, handlers: poolHandlers(pool, ["render"]) });
+
+// Later, or in the hook:
+const job = await renders.getJob("page-42"); // state, attempt, lastError and, once it succeeded, result
+```
+
+The defuss-scheduler documentation covers the job fields, deadlines, retention and why follow-ups cannot be lost. The daemon checks every `_rpc` payload of a job and its follow-ups at `submit`, so a hook to an address it would refuse fails with `INVALID_ARGUMENT` at once. A bot submits and pulls only in its own apps. A hook's token verifies to `{ ..., schedule: null, job: null, cause: { job, run, state } }`, so the app learns which job ended and how from the daemon, not from the request. Its `X-Backplane-Job` header names the job too. A job whose own handler is `_rpc` is an RPC call made once, and its token names the job in `job`.
+
+VERIFIED by tests/jobs.test.ts and by the packed-consumer test on each of its three daemon phases: a Node.js and a Bun worker process with one bot key shared 20 jobs, and all 23 endings reached the hook with a verified cause. VERIFIED by probe on 2026-11-26: 200 idle worker slots polling an empty queue sent 714 claims per second and cost the daemon 2.0 seconds of CPU in 10 seconds, about a fifth of one core. Under Bun, use defuss-multicore 0.1.1 or later: a 0.1.0 pool on `node:worker_threads` never answers there.
 
 ### RPC callbacks
 
@@ -287,7 +322,7 @@ await tenant.scheduler("jobs").create({
 });
 ```
 
-The payload is the callback's `url` plus the call, `{ v, className, methodName, args }`, which agents read as plain JSON. A payload without `v`, written before defuss-rpc versioned its calls, still runs, and a `v` that defuss-rpc does not know fails `create` with `INVALID_ARGUMENT`. The daemon sends the call with defuss-rpc's `encodeRpcCall`: `POST` to `url` with the DSON body. Its headers are `X-Backplane-Callback`, `X-Backplane-Schedule`, `X-Backplane-Run` and `X-Backplane-Attempt`. `X-Backplane-Callback` is a one-time token: while the call runs, `shopApp.callbacks.verify(token)` returns `{ app, tenant, bucket, schedule, run, attempt }`, and after it, or for another app's key, `NOT_FOUND`. The app refuses a call whose token does not verify. Delivery is at least once, so the app should drop a run ID it has already handled. The run stores `{status, result}`, where `result` is the function's return value when it is JSON and null otherwise.
+The payload is the callback's `url` plus the call, `{ v, className, methodName, args }`, which agents read as plain JSON. A payload without `v`, written before defuss-rpc versioned its calls, still runs, and a `v` that defuss-rpc does not know fails `create` with `INVALID_ARGUMENT`. The daemon sends the call with defuss-rpc's `encodeRpcCall`: `POST` to `url` with the DSON body. Its headers are `X-Backplane-Callback`, `X-Backplane-Schedule` for a schedule's run, `X-Backplane-Job` for a job and a job's follow-up, `X-Backplane-Run` and `X-Backplane-Attempt`. `X-Backplane-Callback` is a one-time token: while the call runs, `shopApp.callbacks.verify(token)` returns `{ app, tenant, bucket, schedule, job, cause, run, attempt }`, and after it, or for another app's key, `NOT_FOUND`. The app refuses a call whose token does not verify. Delivery is at least once, so the app should drop a run ID it has already handled. The run stores `{status, result}`, where `result` is the function's return value when it is JSON and null otherwise.
 
 `url` must use http or https on `127.0.0.1`, `localhost` or `[::1]`, or an origin listed in `BACKPLANE_CALLBACK_ORIGINS`, so a key holder cannot make the daemon call any address. A payload that breaks these rules fails `create` or `update` with `INVALID_ARGUMENT`. A call fails after 60 seconds or on a redirect. An answer with status 2xx completes the run. A 4xx answer other than 408 and 429 fails it for good. Other failures retry within the schedule's retry policy. Each failed call logs a `WARN` line to the `_backplane` log. The daemon checks for due callbacks every 250 ms.
 
@@ -387,7 +422,7 @@ Configure the agent's Streamable HTTP transport with endpoint `http://127.0.0.1:
 
 The file is gitignored and written with mode 600, because it holds the bot key. Entries of other servers stay; linear-clone's `make mcp-config` adds its own entry to the same file. The packed-consumer test connects from a file that `make mcp-config` wrote for its throwaway daemon.
 
-Tool discovery lists the ten cache and document operations, `vfs.put`, `vfs.get`, `vfs.head`, `vfs.list` and `vfs.delete`, `logs.write` and `logs.read`, the twelve `scheduler.` management tools, and the read-only `auth.status`, `auth.members`, `auth.listApiKeys` and `bots.list`, each with its input schema. For example, call `cache.get` with these arguments.
+Tool discovery lists the ten cache and document operations, `vfs.put`, `vfs.get`, `vfs.head`, `vfs.list` and `vfs.delete`, `logs.write` and `logs.read`, the fourteen `scheduler.` tools for schedules and jobs, and the read-only `auth.status`, `auth.members`, `auth.listApiKeys` and `bots.list`, each with its input schema. For example, call `cache.get` with these arguments.
 
 ```json
 {"scope":{"app":"shop","tenant":"acme","bucket":"catalog"},"key":"currency"}

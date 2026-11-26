@@ -46,7 +46,7 @@
     "defuss-mcp": "0.6.2",
     "defuss-o11y": "0.3.0",
     "defuss-rpc": "4.5.0",
-    "defuss-scheduler": "0.2.0",
+    "defuss-scheduler": "0.3.0",
     "defuss-serve": "0.5.0",
     "defuss-vfs": "0.3.0"
   },
@@ -56,6 +56,7 @@
     "@types/node": "^26.0.0",
     "defuss-auth": "0.2.0",
     "defuss-db": "3.3.0",
+    "defuss-multicore": "0.1.1",
     "oxlint": "1.94.0",
     "pkgroll": "^2.0.0",
     "playwright-core": "1.65.1",

@@ -65,6 +65,8 @@ export interface Ops {
   };
   scheduler(bucket: string): {
     create(definition: Any, options?: { requestId: string }): Promise<Any>;
+    submit(job: Any, options?: { requestId: string }): Promise<Any>;
+    getJob(id: string): Promise<Any | null>;
     get(id: string): Promise<Any | null>;
     list(page?: Any): Promise<{ items: Any[]; cursor?: string | null } & Any>;
     update(id: string, patch: Any, change: { revision: string; requestId: string }): Promise<Any>;
@@ -199,6 +201,8 @@ export function mcpOps(agent: Client, app: string, tenant: string): Ops {
       const t = async (name: string, args: Any) => (await tool("scheduler." + name, { scope, ...args })) as Any;
       return {
         create: (definition, options) => t("create", { definition, ...(options ? { options } : {}) }),
+        submit: (job, options) => t("submit", { job, ...(options ? { options } : {}) }),
+        getJob: async (id) => (await t("getJob", { id })) as Any | null,
         get: async (id) => (await t("get", { id })) as Any | null,
         list: async (page) => (await t("list", page ? { page } : {})) as { items: Any[] } & Any,
         update: (id, patch, change) => t("update", { id, patch, change }),
