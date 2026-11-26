@@ -4,20 +4,23 @@ An issue tracker in the style of Linear, built on defuss-backplane. It keeps eve
 
 ## Run it
 
-The app needs a running defuss-backplane daemon and its bot key.
+The app needs a running defuss-backplane daemon and its bot key. Start the daemon from the repository root with `make setup` and `make start`.
 
 ```sh
-make setup                 # tools, the packed backplane, dependencies and the three test browsers
-cp .env.example .env       # then set BACKPLANE_API_KEY to the daemon's API_KEY
-make start                 # builds dist/ and runs it detached
-make status                # running | dead | stopped
-make log                   # the last lines of var/log/linear-clone.stdout and .stderr
+make setup                 # tools, the packed backplane, dependencies, the three test browsers and a missing .env
+make start                 # builds dist/ quietly, runs it detached, prints {"state":"running","url":…}
+make status                # running | dead | stopped, with pid and URL
+make log                   # the last 50 stdout and stderr entries, merged by time
 make stop
 ```
 
+Each verb prints JSON, one object per line; `FORMAT=text` prints readable lines.
+
 Open `http://127.0.0.1:43180/`. On its first start in an empty workspace, the app seeds `input/seed.json`, the scaffold's team, 15 issues, comments, activity and inbox, with dates moved to today.
 
-VERIFIED: the service exits with code 1 and one log line when its configuration is invalid or the backplane's `/readyz` does not answer, and with 0 on SIGTERM (tests/cli.test.ts). `make start` then reports it dead.
+VERIFIED: the service exits with code 1 and one log line when its configuration is invalid or the backplane's `/readyz` does not answer, and with 0 on SIGTERM (tests/cli.test.ts). `make start` then reports `"state":"dead"` with the last stderr lines.
+
+`make setup` creates a missing `.env` from `.env.example` with the daemon's `API_KEY` from the repository root's `.env`, and creates that one first if it is missing. It never rewrites an existing `.env`. A root key with a character besides letters, digits and `._~+/=-` stops setup with a message, because Bun's `.env` parser changes some of them, such as `$`, `#`, quotes and spaces. You then write `BACKPLANE_API_KEY` yourself. Without `.env`, `make start` reports `"state":"unconfigured"` with `"fix":"make setup"`.
 
 ## Configuration
 

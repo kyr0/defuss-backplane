@@ -38,6 +38,12 @@ async function tool<T = unknown>(
   return (result.structuredContent as { value: T }).value;
 }
 type Schedule = Awaited<ReturnType<typeof queue.get>> & {};
+/** The schedule without the planner's fields, as defuss-scheduler's ScheduleRecord omits them. Why: a schedule due every
+ * second advances nextDue and lastProcessed between two reads without a new revision (VERIFIED: CI run 45765549043). */
+const record = (s: unknown) => {
+  const { nextDue: _due, lastProcessed: _processed, lastSkipped: _skipped, ...rest } = s as Schedule;
+  return rest;
+};
 const mode = process.argv[2];
 /** An app's defuss-rpc server on loopback receives one scheduled callback from the daemon, with the bot key. */
 async function checkCallback() {
@@ -83,13 +89,13 @@ try {
       { id: "one", handler: "rollup", cron: "* * * * * *", retry: { baseMs: 0 } },
       { requestId: "create" },
     );
-    assert.deepEqual(await tool("get", { id: "one" }), created);
+    assert.deepEqual(record(await tool("get", { id: "one" })), record(created));
     const changed = await tool<Schedule>("update", {
       id: "one",
       patch: { payload: 7 },
       change: { revision: created.revision, requestId: "edit" },
     });
-    assert.deepEqual(await queue.get("one"), changed);
+    assert.deepEqual(record(await queue.get("one")), record(changed));
     await assert.rejects(
       queue.pause("one", { revision: created.revision, requestId: "stale" }),
       (e: unknown) =>

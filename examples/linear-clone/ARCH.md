@@ -64,12 +64,12 @@ The workspace holds names of people, issue texts, comments and attachments, all 
 
 | Task | Command |
 | --- | --- |
-| Start detached, built from source | `make start` writes `tmp/linear-clone.pid` and appends to `var/log/linear-clone.stdout` and `.stderr`. |
-| Check | `make status` exits 0 when running, 1 for a stale pid, 3 when stopped. |
-| Read the log | `make log`, or the backplane's app log of `linear-clone`. |
+| Start detached, built from source | `make start` writes `tmp/linear-clone.pid`, appends to `var/log/linear-clone.stdout` and `.stderr`, and prints the state as JSON once the app logs `listening` or exits. |
+| Check | `make status` prints the state, pid and URL as JSON and exits 1 only for a stale pid. |
+| Read the log | `make log` merges stdout and stderr by time, one JSON object per line; or the backplane's app log of `linear-clone`. |
 | Metrics | `make metrics` prints the backplane's call counts and durations for this app. |
 | Stop | `make stop` sends SIGTERM and kills after 5 seconds. |
 
-VERIFIED: `make start`, `status`, `log`, `metrics` and `stop` work against a running backplane, and a restart on another port updates the schedules' callback URL (tests/jobs.test.ts). Each log line starts with an ISO-8601 UTC timestamp and its level. VERIFIED: defuss-mcp prints one notice on stderr at startup, because the MCP endpoint answers in JSON mode.
+VERIFIED: `make start`, `status`, `log`, `metrics` and `stop` work against a running backplane, and the lifecycle verbs' JSON is tested with a real process in the repository's tests/service.test.ts, and a restart on another port updates the schedules' callback URL (tests/jobs.test.ts). Each log line starts with an ISO-8601 UTC timestamp and its level. VERIFIED: defuss-mcp prints one notice on stderr at startup, because the MCP endpoint answers in JSON mode.
 
 To back up, back up the backplane's data root; the app has nothing else.

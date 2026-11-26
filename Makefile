@@ -3,50 +3,46 @@ NAME ?= defuss-backplane
 RUNTIME ?= node
 RUN  ?= exec $(RUNTIME) dist/cli.js
 N    ?= 50
+FORMAT ?= json
 export RUN
 # The CLI loads .env itself under both runtimes, preserving literal key characters.
-LOG   = var/log/$(NAME)
-PID   = tmp/$(NAME).pid
-ALIVE = [ -f $(PID) ] && kill -0 "$$(cat $(PID))" 2>/dev/null
 
-.PHONY: help setup start stop restart status log metrics bench test coverage lint e2e verify
+.PHONY: help setup start stop restart status log metrics bench test coverage lint e2e verify logs
 .DEFAULT_GOAL := help
 
 help: ## list the verbs with their usage (default goal)
 	@awk -F':.*## ' '/^[a-zA-Z0-9_ -]+:.*## /{printf "  %-12s %s\n", $$1, $$2}' $(firstword $(MAKEFILE_LIST))
 
-setup: ## install locked development dependencies (mise supplies pinned runtimes)
+setup: ## install locked development dependencies (mise supplies pinned runtimes) and create a missing .env
 	@if command -v mise >/dev/null 2>&1; then mise install; fi
 	bun install --frozen-lockfile
+	@$(MAKE) -s .env
 
 build: ## build the ESM package, types and executable
 	bun run build
 
-start: build ## run RUN detached: pid in tmp/, stdout|stderr appended to var/log/
-	@mkdir -p var/log tmp
-	@if $(ALIVE); then echo "running pid=$$(cat $(PID))"; exit 0; fi; \
-	[ -n "$$RUN" ] || { echo "UNKNOWN[start] BC RUN unset"; exit 6; }; \
-	if command -v setsid >/dev/null 2>&1; then nohup setsid sh -c "$$RUN" >$(LOG).stdout 2>$(LOG).stderr </dev/null & \
-	else set -m; nohup sh -c "$$RUN" >$(LOG).stdout 2>$(LOG).stderr </dev/null & set +m; fi; \
-	echo $$! >$(PID); sleep 1; \
-	if $(ALIVE); then echo "running pid=$$(cat $(PID))"; else echo "dead; see: make log"; exit 1; fi
+# The lifecycle verbs print JSON (FORMAT=text: one line each) from scripts/service.ts.
+SERVICE = node scripts/service.ts --name $(NAME) --lines $(N) --format $(FORMAT)
+start: ## build quietly, then run RUN detached (pid in tmp/, logs appended to var/log/); prints its state as JSON
+	@$(SERVICE) --run "$$RUN" --build "bun run build" start
 
-stop: ## SIGTERM the service group, SIGKILL after 5 s
-	@if $(ALIVE); then p=$$(cat $(PID)); kill -s TERM -- -$$p 2>/dev/null || kill -s TERM $$p; \
-	i=0; while kill -0 $$p 2>/dev/null && [ $$i -lt 50 ]; do sleep 0.1; i=$$((i+1)); done; \
-	kill -s KILL -- -$$p 2>/dev/null || true; fi; rm -f $(PID); echo stopped
+# setup creates a missing .env from .env.example with a random bot key, readable by the owner only. Why random, not a
+# fixed default key: every holder may access every tenant. An existing .env is never rewritten.
+.env:
+	@(umask 077; set -C; sed "s/^API_KEY=$$/API_KEY=$$(openssl rand -hex 32)/" .env.example > $@) && echo "created .env with a new API_KEY"
+
+stop: ## SIGTERM the service group, SIGKILL after 5 s; prints JSON
+	@$(SERVICE) stop
 
 restart: stop start ## stop, then start
 
-# LSB codes (make prints them as Error N): 0 running, 1 dead with stale pid, 3 stopped.
-status: ## running | dead (stale pid) | stopped, as LSB exit codes
-	@if $(ALIVE); then echo "running pid=$$(cat $(PID))"; \
-	elif [ -f $(PID) ]; then echo "dead pid=$$(cat $(PID)); see: make log"; exit 1; \
-	else echo stopped; exit 3; fi
+status: ## running | dead | stopped as JSON; exits 1 only when dead (a stale pid)
+	@$(SERVICE) status
 
-log: ## tail stdout and stderr logs (N=50 lines)
-	@for f in $(LOG).stdout $(LOG).stderr; do [ -f $$f ] && { echo "== $$f"; tail -n $(N) $$f; }; done; \
-	ls $(LOG).* >/dev/null 2>&1 || echo "∅ no logs for $(NAME)"
+log: ## the last N=50 stdout and stderr entries merged by time, one JSON object per line
+	@$(SERVICE) log
+
+logs: log
 
 metrics: ## show the last package verification results
 	@cat output/e2e.json

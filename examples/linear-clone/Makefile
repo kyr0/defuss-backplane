@@ -3,18 +3,16 @@
 NAME ?= linear-clone
 RUN  ?= exec bun dist/server.js
 N    ?= 50
+FORMAT ?= json
 export RUN
 # Installer default dirs as a fallback: recipes find tools that setup just installed, while tools on PATH keep precedence.
 export PATH := $(PATH):$(HOME)/.local/bin:$(HOME)/.bun/bin:$(HOME)/.local/share/mise/shims
-LOG   = var/log/$(NAME)
-PID   = tmp/$(NAME).pid
-ALIVE = [ -f $(PID) ] && kill -0 "$$(cat $(PID))" 2>/dev/null
 # The backplane comes from this repository, because the release with scheduled RPC callbacks is not on npm yet.
 ROOT        = ../..
 BACKPLANE   = deps/defuss-backplane
 BACKPLANE_TGZ = $(ROOT)/output/defuss-backplane-$(shell node -p "require('$(ROOT)/package.json').version").tgz
 
-.PHONY: help setup build start stop restart status log metrics bench test coverage lint e2e verify
+.PHONY: help setup build start stop restart status log metrics bench test coverage lint e2e verify logs
 .DEFAULT_GOAL := help
 
 help: ## list the verbs with their usage (default goal)
@@ -23,42 +21,44 @@ help: ## list the verbs with their usage (default goal)
 # Why a directory extracted from the packed tarball: `file:../..` links the whole repository, var/ and node_modules
 # included, and a tarball dependency kept serving its first content after a repack (VERIFIED by probe on Bun 1.4.5).
 # `bun install` re-links a directory dependency's recreated files.
-setup: ## install pinned tools, pack the backplane from the repository root, then exactly the locked dependencies
+setup: ## install pinned tools, pack the backplane from the repository root, the locked dependencies and a missing .env
 	@if command -v mise >/dev/null 2>&1; then mise install; fi
 	$(MAKE) -C $(ROOT) pack
 	rm -rf $(BACKPLANE) && mkdir -p $(BACKPLANE)
 	tar xzf $(BACKPLANE_TGZ) -C $(BACKPLANE) --strip-components=1
 	bun install --frozen-lockfile
 	./node_modules/.bin/playwright-core install chromium firefox webkit
+	@$(MAKE) -s .env
 
 build: ## bundle the server and the frontend into dist/
 	bun run build
 
-start: build ## run the built service detached: pid in tmp/, stdout|stderr appended to var/log/
-	@mkdir -p var/log tmp
-	@if $(ALIVE); then echo "running pid=$$(cat $(PID))"; exit 0; fi; \
-	[ -n "$$RUN" ] || { echo "UNKNOWN[start] BC RUN unset"; exit 6; }; \
-	if command -v setsid >/dev/null 2>&1; then nohup setsid sh -c "$$RUN" >$(LOG).stdout 2>$(LOG).stderr </dev/null & \
-	else set -m; nohup sh -c "$$RUN" >$(LOG).stdout 2>$(LOG).stderr </dev/null & set +m; fi; \
-	echo $$! >$(PID); sleep 1; \
-	if $(ALIVE); then echo "running pid=$$(cat $(PID))"; else echo "dead; see: make log"; exit 1; fi
+# The lifecycle verbs print JSON (FORMAT=text: one line each) from $(ROOT)/scripts/service.ts.
+SERVICE = node $(ROOT)/scripts/service.ts --name $(NAME) --lines $(N) --format $(FORMAT)
+start: ## build quietly, then run RUN detached (pid in tmp/, logs appended to var/log/); prints its state as JSON
+	@$(SERVICE) --run "$$RUN" --build "bun run build" start
 
-stop: ## SIGTERM the service group, SIGKILL after 5 s
-	@if $(ALIVE); then p=$$(cat $(PID)); kill -s TERM -- -$$p 2>/dev/null || kill -s TERM $$p; \
-	i=0; while kill -0 $$p 2>/dev/null && [ $$i -lt 50 ]; do sleep 0.1; i=$$((i+1)); done; \
-	kill -s KILL -- -$$p 2>/dev/null || true; fi; rm -f $(PID); echo stopped
+# setup creates a missing .env from .env.example with the daemon's API_KEY from the repository root's .env, which the
+# root creates first if it has none, so `make start` there and here pair up. A key with a character besides letters, digits
+# and ._~+/=- is left for a human to write, because Bun's .env parser changes some ($, #, quotes, spaces).
+.env:
+	@$(MAKE) -s -C $(ROOT) .env
+	@key=$$(sed -n 's/^API_KEY=//p' $(ROOT)/.env | tail -n 1); \
+	printf '%s' "$$key" | grep -Eq '^[A-Za-z0-9._~+/=-]+$$' || { echo "UNKNOWN[.env] BC $(ROOT)/.env's API_KEY is empty or needs quoting: set BACKPLANE_API_KEY in .env by hand"; exit 6; }; \
+	(umask 077; set -C; sed "s|^BACKPLANE_API_KEY=$$|BACKPLANE_API_KEY=$$key|" .env.example > $@) && echo "created .env with the backplane's API_KEY"
+
+stop: ## SIGTERM the service group, SIGKILL after 5 s; prints JSON
+	@$(SERVICE) stop
 
 restart: stop start ## stop, then start
 
-# LSB codes (make prints them as Error N): 0 running, 1 dead with stale pid, 3 stopped.
-status: ## running | dead (stale pid) | stopped, as LSB exit codes
-	@if $(ALIVE); then echo "running pid=$$(cat $(PID))"; \
-	elif [ -f $(PID) ]; then echo "dead pid=$$(cat $(PID)); see: make log"; exit 1; \
-	else echo stopped; exit 3; fi
+status: ## running | dead | stopped as JSON; exits 1 only when dead (a stale pid)
+	@$(SERVICE) status
 
-log: ## tail stdout and stderr logs (N=50 lines)
-	@for f in $(LOG).stdout $(LOG).stderr; do [ -f $$f ] && { echo "== $$f"; tail -n $(N) $$f; }; done; \
-	ls $(LOG).* >/dev/null 2>&1 || echo "∅ no logs for $(NAME)"
+log: ## the last N=50 stdout and stderr entries merged by time, one JSON object per line
+	@$(SERVICE) log
+
+logs: log
 
 metrics: ## print the running backplane's metric lines for app="linear-clone" (reads .env like the app)
 	bun scripts/metrics.ts

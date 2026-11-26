@@ -56,20 +56,7 @@ Wrap: EVERY lead becomes a test | .vae/VERIFY.py rule | one MEMORY line with BC,
 2026-11-25T04:57:07Z s=dcdb118f FINDING examples/linear-clone/Makefile:2 and .env.example (own claim corrected) learn=none: VERIFIED: probe outputs K1..K9 recorded; documentation corrected.
 2026-11-25T05:19:11Z s=dcdb118f FINDING Makefile:test|coverage, package.json:scripts.test (root) learn=none: VERIFIED: bun test ./tests lists no examples/ file.
 2026-11-25T05:19:11Z s=dcdb118f FINDING examples/linear-clone/input/seed.json learn=none: VERIFIED: counts printed by the extraction and checked by the seed test.
-2026-11-25T05:34:36Z s=dcdb118f FINDING examples/linear-clone/src/server/cli.ts learn=test: VERIFIED: tests/cli.test.ts spawns it in a temporary project directory.
-2026-11-25T05:34:36Z s=dcdb118f FINDING examples/linear-clone/src/server/api.ts learn=test: VERIFIED: each method called once through the RPC client, the main error path asserted.
-2026-11-25T05:34:36Z s=dcdb118f FINDING examples/linear-clone/src/server/config.ts:TIME_ZONE learn=test: VERIFIED: config tests.
-2026-11-25T05:39:04Z s=dcdb118f DONE fp=4a1ff273c7c1 cov=98.0% paths=examples/linear-clone/src/server/api.ts,examples/linear-clone/src/server/config.ts,examples/linear-clone/src/server/jobs.ts,examples/linear-clone/src/server/server.ts(+4)
-2026-11-25T05:39:04Z s=dcdb118f FINDING examples/linear-clone/src/server/jobs.ts:jobsGuard learn=test: VERIFIED: tests/jobs.test.ts checks anonymous, wrong key, the key, and the MCP tool list.
-2026-11-25T05:39:04Z s=dcdb118f FINDING examples/linear-clone/src/server/jobs.ts:dueDigest learn=test: VERIFIED: repeated call test and the real delivery test.
-2026-11-25T05:39:04Z s=dcdb118f FINDING examples/linear-clone/src/server/jobs.ts:cycleRollover learn=test: VERIFIED: rollover test with a moved app clock.
-2026-11-25T05:39:04Z s=dcdb118f FINDING examples/linear-clone/src/server/jobs.ts:upsertSchedules + server.ts learn=test: VERIFIED: restart test checks URL, revision and the unchanged outcome.
-2026-11-25T05:39:04Z s=dcdb118f FINDING examples/linear-clone/tests/jobs.test.ts (delivery) learn=test: VERIFIED: passes against the daemon child process.
-2026-11-25T05:39:04Z s=dcdb118f FINDING examples/linear-clone/src/server/config.ts:DIGEST_CRON|ROLLOVER_CRON learn=test: VERIFIED: config tests.
-2026-11-25T05:53:40Z s=dcdb118f DONE fp=b8cedf58d025 cov=98.0% paths=examples/linear-clone/Makefile,examples/linear-clone/bun.lock,examples/linear-clone/input/seed.json,examples/linear-clone/package.json(+27)
 2026-11-25T05:53:40Z s=dcdb118f FINDING examples/linear-clone/src/web/index.html + tracker.css learn=none: VERIFIED: extraction counts printed; screenshots of list, issue page, cycles and inbox show live data.
-2026-11-25T05:53:40Z s=dcdb118f FINDING examples/linear-clone/scripts/e2e.ts learn=test: VERIFIED: make e2e passes, 3 checks.
-2026-11-25T05:53:40Z s=dcdb118f FINDING examples/linear-clone/src/core/issue.ts:startedAt learn=test: VERIFIED: core tests for start, keep and clear, and the burn-up's started column.
 2026-11-25T05:53:40Z s=dcdb118f FINDING examples/linear-clone/src/core/seed.ts:shiftSeed ms learn=test: VERIFIED: workspace test expects Marco's comment 12 minutes before now.
 2026-11-25T05:53:40Z s=dcdb118f FINDING examples/linear-clone/src/web/views/cycles.ts learn=none: VERIFIED: the cycles screenshot shows 15 scope, 8 started, 3 completed, 9 of 14 days left.
 2026-11-25T05:53:40Z s=dcdb118f FINDING examples/linear-clone/src/web/main.ts learn=test: VERIFIED: routes pass in three browsers without console errors; interactions are covered by M7.
@@ -106,3 +93,16 @@ Wrap: EVERY lead becomes a test | .vae/VERIFY.py rule | one MEMORY line with BC,
 2026-11-26T06:03:00Z s=dcdb118f FINDING src/client.ts:1 learn=none: VERIFIED: gate test step ran tests/client.test.ts on defuss-rpc 4.4.0.
 2026-11-26T06:03:00Z s=dcdb118f FINDING examples/linear-clone/output/e2e.json learn=none: VERIFIED: gate verify step VERIFIED in this run.
 2026-11-26T06:03:00Z s=dcdb118f FINDING ARCH.md:8,45 CHANGELOG.md:5 plans:20,44,95 B/P learn=none: VERIFIED: vae.py prose on the three pages reported findings=0.
+2026-11-26T06:18:41Z s=dcdb118f DONE fp=719a7ffb6c3c cov=98.0% paths=Makefile,README.md,examples/linear-clone/Makefile,examples/linear-clone/README.md(+1)
+2026-11-26T06:18:41Z s=dcdb118f FINDING Makefile:start learn=none: VERIFIED: fresh-clone probes: start without .env exits 2 with the message; setup prints 'created .env with a new API_KEY', -rw-------, 64 hex; start then runs; 
+2026-11-26T06:18:41Z s=dcdb118f FINDING examples/linear-clone/Makefile:.env learn=none: VERIFIED: fresh-clone probes: example start without .env exits 2 with the message; .env alone creates both files with matching keys; setup then start serves htt
+2026-11-26T06:18:41Z s=dcdb118f FINDING examples/linear-clone tests with .env present learn=none: VERIFIED: fresh clone with both .env files: example make test 69 pass, root make test 41 pass.
+2026-11-26T06:18:41Z s=dcdb118f FINDING scripts/consumer-scheduler.ts:record learn=none: VERIFIED: the CI diff shows only planner fields changed; defuss-scheduler dist types define ScheduleRecord = Omit<Schedule, nextDue|lastProcessed|lastSkipped>; 
+2026-11-26T06:18:41Z s=dcdb118f FINDING README.md:305 examples/linear-clone/README.md:7-24 B/P learn=none: VERIFIED: vae.py prose on both pages reported findings=0.
+2026-11-26T06:27:54Z s=dcdb118f FAIL env.example
+2026-11-26T06:28:11Z s=dcdb118f FAIL env.example
+2026-11-26T06:51:18Z s=dcdb118f DONE fp=e881b5998bae cov=94.9% paths=Makefile,README.md,examples/linear-clone/ARCH.md,examples/linear-clone/Makefile(+5)
+2026-11-26T06:51:18Z s=dcdb118f FINDING scripts/service.ts learn=test: VERIFIED: tests/service.test.ts drives start/status/log/stop, a dead start, a missing .env, a failed build and FORMAT=text with real processes (5 pass); clone p
+2026-11-26T06:51:18Z s=dcdb118f FINDING Makefile, examples/linear-clone/Makefile learn=none: VERIFIED: grep for running pid / make start|status|log callers found none; make help lists the verbs.
+2026-11-26T06:51:18Z s=dcdb118f FINDING Makefile:.env, examples/linear-clone/Makefile:.env learn=test: VERIFIED: tests/service.test.ts 'start refuses without .env'; earlier fresh-clone probes of both .env targets.
+2026-11-26T06:51:18Z s=dcdb118f FINDING scripts/service.ts:flags learn=verifier: VERIFIED: gate env.example check passes in this run; grep process.env in scripts/service.ts finds none; tests/service.test.ts passes flags (5 pass).
