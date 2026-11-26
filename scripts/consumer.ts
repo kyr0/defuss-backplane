@@ -1,12 +1,9 @@
 /** VERIFIED: The executable is copied outside the source tree and imports the installed client and the official MCP SDK. */
 import { checkRevisions } from "./consumer-revisions.ts";
 import { checkVfs } from "./consumer-vfs.ts";
+import { connectMcp } from "./consumer-mcp.ts";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import {
-  Client,
-  StreamableHTTPClientTransport,
-} from "@modelcontextprotocol/client";
 import { connectBackplane, type Scope } from "defuss-backplane/client";
 
 for (const name of [
@@ -22,17 +19,7 @@ const client = await connectBackplane({ app: scope.app });
 const tenant = client.tenant(scope.tenant);
 const cache = tenant.cache(scope.bucket),
   db = tenant.db(scope.bucket);
-const agent = new Client({ name: "packed-consumer", version: "1" });
-await agent.connect(
-  new StreamableHTTPClientTransport(
-    new URL("http://127.0.0.1:" + process.env.PORT + "/mcp"),
-    {
-      requestInit: {
-        headers: { Authorization: "Bearer " + process.env.API_KEY },
-      },
-    },
-  ),
-);
+const agent = await connectMcp("packed-consumer");
 /** Calls a tool that must succeed and returns its `structuredContent.value`, typed by the caller. */
 async function call<T = unknown>(
   name: string,

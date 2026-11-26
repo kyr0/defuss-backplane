@@ -5,5 +5,5 @@
     "erasableSyntaxOnly": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["e2e.ts", "service.ts"]
+  "include": ["e2e.ts", "service.ts", "mcp-config.ts"]
 }

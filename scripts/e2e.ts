@@ -33,6 +33,9 @@ const consumerScripts = [
   "consumer-types.ts",
   "consumer-vfs.ts",
   "consumer-scheduler.ts",
+  "consumer-mcp.ts",
+  "consumer-equivalence.ts",
+  ...["run", "drivers", "kit", "cache", "db", "logs", "scheduler", "vfs", "http", "big", "video"].map((m) => `deep/${m}.ts`),
 ];
 const bot = randomBytes(32).toString("hex");
 const listener = createServer();
@@ -226,6 +229,18 @@ async function runPhase(
       { cwd: tmp, env, timeout: 30000 },
     );
     observed.push({ daemon: runtime, ...JSON.parse(mixed.stdout.trim()) });
+    // Every MCP tool against its RPC method, through the client config that make mcp-config wrote.
+    const twins = await exec(runtime, ["consumer-equivalence.ts", phase], { cwd: tmp, env, timeout: 30000 });
+    observed.push({ daemon: runtime, ...JSON.parse(twins.stdout.trim()) });
+    // The deep suite once, against this Node.js daemon, whose pid bounds its memory during the 512 MiB transfer.
+    if (phase === "node-first") {
+      const deep = await exec(
+        "node",
+        ["deep/run.ts", "--mcp", "mcp.json", "--pid", String(child.pid), "--run", "e2e", "--report", resolve("output/deep.json")],
+        { cwd: tmp, env, timeout: 900000, maxBuffer: 16 * 1024 * 1024 },
+      );
+      observed.push({ daemon: runtime, deep: JSON.parse(deep.stdout.trim().split("\n").at(-1) ?? "{}") });
+    }
     // VERIFIED by probe: a client that stops reading a download larger than the socket buffers keeps its connection
     // open. The SIGTERM below must still exit 0 within the deadline.
     const stalled =
@@ -279,6 +294,7 @@ try {
       dependencies: {
         "defuss-backplane": "file:" + tarball,
         "@modelcontextprotocol/client": "2.4.0",
+        "playwright-core": "1.65.1",
       },
     }),
   );
@@ -293,6 +309,9 @@ try {
     ],
     { cwd: tmp, timeout: 120000 },
   );
+  await mkdir(join(tmp, "deep"), { recursive: true });
+  await mkdir(join(tmp, "input"), { recursive: true });
+  await copyFile("input/video.webm", join(tmp, "input/video.webm"));
   for (const name of consumerScripts)
     await copyFile(join("scripts", name), join(tmp, name));
   // The consumer scripts run unbuilt under Node.js type stripping, so the check also rejects non-erasable syntax.
@@ -331,6 +350,14 @@ try {
     "API_KEY=" + bot + "\nPORT=" + port + "\nBACKPLANE_DATA_DIR=./data\n",
     { mode: 0o600 },
   );
+  // The consumers connect to MCP from the file `make mcp-config` writes, with this daemon's .env as its input.
+  const written = await exec("make", ["-s", "mcp-config", "MCP_ENV=" + join(tmp, ".env"), "MCP_OUT=" + join(tmp, "mcp.json")]);
+  assert.deepEqual(JSON.parse(written.stdout), {
+    name: "defuss-backplane",
+    url: "http://127.0.0.1:" + port + "/mcp",
+    headers: ["Authorization"],
+    written: [join(tmp, "mcp.json")],
+  });
   await runPhase("node", "node-first", "-");
   await rm(join(tmp, "node_modules"), { recursive: true, force: true });
   await exec("bun", ["install"], { cwd: tmp, timeout: 120000 });

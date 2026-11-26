@@ -50,6 +50,18 @@ function issueRef(id: unknown) {
   if (!parseIssueId(id)) throw new InvalidInput("id", "must be an issue ID such as ENG-142");
   return id as string;
 }
+/** VERIFIED: without the check, a non-string cycle ID reached the backplane, whose TypeError became a 500
+ * (scripts/e2e-api.ts found it). */
+function cycleRef(id: unknown) {
+  if (typeof id !== "string" || !id) throw new InvalidInput("id", "must be a cycle ID such as eng-24");
+  return id;
+}
+/** Without the check, a string would match by substring through `includes`. */
+function itemIds(ids: unknown) {
+  if (ids !== undefined && !(Array.isArray(ids) && ids.every((id) => typeof id === "string")))
+    throw new InvalidInput("ids", "must be a list of inbox item IDs");
+  return ids as string[] | undefined;
+}
 
 export function createApi({ ws, viewer, workspace, timeZone, log }: ApiContext) {
   const api = {
@@ -89,7 +101,7 @@ export function createApi({ ws, viewer, workspace, timeZone, log }: ApiContext) 
       /** The viewer's items, newest first. */
       list: () => ws.inbox.list(viewer),
       /** Marks the viewer's items read, or only `ids`; returns how many changed. */
-      markRead: (ids?: string[]) => ws.inbox.markRead(viewer, ids),
+      markRead: (ids?: string[]) => ws.inbox.markRead(viewer, itemIds(ids)),
     },
     Cycles: {
       /** The running cycle with its statistics, or null when the team has none. */
@@ -97,7 +109,7 @@ export function createApi({ ws, viewer, workspace, timeZone, log }: ApiContext) 
         const cycle = currentCycle(await ws.cycles.list(), ws.today());
         return cycle ? { cycle, stats: await ws.cycles.stats(cycle.id) } : null;
       },
-      stats: (id: string) => ws.cycles.stats(id),
+      stats: (id: string) => ws.cycles.stats(cycleRef(id)),
     },
     /** Called by the backplane's scheduler with the bot key; a guard refuses every other caller, and MCP leaves them out. */
     Jobs: createJobs(ws),

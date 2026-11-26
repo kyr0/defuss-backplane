@@ -47,6 +47,8 @@ test("probes answer without the key, and /metrics reports each module's calls by
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("text/plain; version=0.0.4; charset=utf-8");
     const text = await response.text();
+    // VERIFIED by the deep suite: the README lists this counter, but it was missing until the first fault.
+    expect(sample(text, "backplane_scheduler_errors_total", {})).toBe(0);
     const calls = "backplane_operation_duration_count";
     expect(sample(text, calls, { module: "cache", method: "set", app: "shop", code: "OK" })).toBe(1);
     expect(sample(text, calls, { module: "cache", method: "get", app: "shop", code: "OK" })).toBe(2);

@@ -61,7 +61,7 @@ A failed call answers with a code in its message, such as `REVISION_CONFLICT(iss
 | cache | Cycle statistics for 5 minutes, dropped on every change to an issue of that cycle. |
 | vfs | Attachments under `<issue>/<file name>`. |
 | logs | The app's own log lines in the app log, and workspace audit events (issue created, changed, moved, deleted) in the tenant's log. |
-| scheduler | The schedules `due-digest` and `cycle-rollover`, whose RPC callbacks call `Jobs`. |
+| scheduler | The schedules `due-digest` and `cycle-rollover`, whose RPC callbacks call `Jobs`. After someone removes or terminates one, the next start creates a successor under a fresh ID with the job's name as its `ref`, because the backplane keeps a retired schedule's ID reserved. |
 
 ## Verbs
 
@@ -69,10 +69,29 @@ A failed call answers with a code in its message, such as `REVISION_CONFLICT(iss
 | --- | --- |
 | `make test`, `make coverage` | Unit and integration tests against a real backplane daemon in a temporary directory. |
 | `make lint` | oxlint and the strict TypeScript check. |
-| `make e2e` | Builds `dist/`, runs it with a real backplane and drives Chromium, Firefox and WebKit. Writes `output/e2e.json`. |
+| `make e2e` | Builds `dist/`, runs it with a real backplane and drives Chromium, Firefox and WebKit. Then it calls every RPC function and its MCP tool on the built app and compares the results, and it measures the frontend's line coverage in Chromium against a 60 % floor. Last comes the deep suite on a second instance of the built app. Writes `output/e2e.json` and the coverage report `output/coverage-web/`. |
+| `make e2e-live` | Runs the deep suite against the backplane that `.env` names, on a second instance of the built app, and writes `output/deep-live.json`. The app `make start` runs and its workspace stay untouched. |
+| `make mcp-config` | Writes the app's MCP entry, `{"type":"http","url":"http://127.0.0.1:<PORT>/mcp"}` under `linear-clone`, into `.mcp.json` here and at the repository root, where the backplane's entry is. Other entries stay. |
 | `make bench` | Times `Issues.list` over 1,000 issues and writes `output/bench.json`. |
 | `make metrics` | Prints the running backplane's metric lines for `app="linear-clone"`. |
 | `make verify` | lint, test, coverage and e2e. |
+
+### Deep suite
+
+`scripts/deep.ts` runs every documented behavior once through defuss-rpc and once through MCP. It works in the workspace `_e2e_test_linear-clone`, on an app instance of its own whose two jobs run every second, and it wipes that workspace before and after the run. The wipe refuses any workspace whose name does not start with `_e2e_test_`. The terminated schedules, their run history and the log lines stay, because the backplane deletes none of them.
+
+| Part | What it checks |
+| --- | --- |
+| Issues | Each invalid field fails with `INVALID_INPUT` and that field's name, and so do an unknown field and a non-object. It also checks defaults, trimming, numbering, the start and completion times, subtasks, an unchanged revision for an empty change, `REVISION_CONFLICT` for a stale one, comments and the activity feed. |
+| Inbox | An assignment, a status or priority change and a comment notify the assignee, read from the backplane as an agent would. The viewer's changes to their own issues notify nobody. The scheduler's due digest adds due and overdue items. `markRead` with IDs, with an empty list and without arguments. |
+| Cycles | Statistics change with every issue change, although the cache holds them. They cover scope, started, done, percentages, days left and the burn-up's last day. |
+| Attachments | Upload, list, download byte for byte, and remove. Exactly 25 MiB round-trips by SHA-256. One byte more, a missing issue and a bad name are refused before the upload. |
+| Removal | An issue goes with its comments, activity and files. A stale revision fails. |
+| Jobs | MCP lists no `Jobs` tool, and a call without the bot key answers 403. The scheduler calls both jobs at the instance's URL and records their results. With the rollover paused, an ended cycle gets open issues. Resumed, the scheduler closes that cycle and carries the open issues into the next one. |
+
+MCP reports a failed call by its HTTP status only, so the code and field of a refusal are checked over RPC, and the status over both. A full run fails when an MCP tool or RPC function went uncalled.
+
+VERIFIED: one `make e2e` run covered 89.1 % of the lines in `src/web`, 90.1 % of the functions and 65.7 % of the branches.
 
 VERIFIED: one `make bench` run on an Apple Silicon Mac measured `Issues.list` over 1,000 issues at 15.3 ms median and 18.6 ms at the 95th percentile, over 50 calls.
 

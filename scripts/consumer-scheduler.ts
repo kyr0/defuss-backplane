@@ -6,26 +6,13 @@ import { once } from "node:events";
 import { setTimeout as pause } from "node:timers/promises";
 import { createRpcServer } from "defuss-rpc/server";
 import { BackplaneError, connectBackplane } from "defuss-backplane/client";
-import {
-  Client,
-  StreamableHTTPClientTransport,
-} from "@modelcontextprotocol/client";
+import { connectMcp } from "./consumer-mcp.ts";
 
 const scope = { app: "scheduler-integration", tenant: "acme", bucket: "jobs" };
 const queue = (await connectBackplane({ app: scope.app }))
   .tenant(scope.tenant)
   .scheduler(scope.bucket);
-const agent = new Client({ name: "scheduler-integration", version: "1" });
-await agent.connect(
-  new StreamableHTTPClientTransport(
-    new URL("http://127.0.0.1:" + process.env.PORT + "/mcp"),
-    {
-      requestInit: {
-        headers: { Authorization: "Bearer " + process.env.API_KEY },
-      },
-    },
-  ),
-);
+const agent = await connectMcp("scheduler-integration");
 async function tool<T = unknown>(
   name: string,
   args: Record<string, unknown> = {},

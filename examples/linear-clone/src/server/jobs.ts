@@ -12,6 +12,7 @@ export const SYSTEM = "system";
 /** A team behind by many cycles catches up one cycle per plan; this bounds one call. */
 const MAX_ROLLOVERS = 52;
 
+/** `id` names the job: it is the first schedule's ID and the `ref` of every schedule for the job. */
 export type JobSchedule = { id: string; cron: string; methodName: "dueDigest" | "cycleRollover" };
 
 /** The two schedules, at the configured times. */
@@ -20,15 +21,37 @@ export const schedules = (crons: { digestCron: string; rolloverCron: string }): 
   { id: "cycle-rollover", cron: crons.rolloverCron, methodName: "cycleRollover" },
 ];
 
-/** Creates each schedule, or updates one whose cron, time zone or callback differ, such as the app's URL after a
- * restart on another port. Returns what happened to each. */
-export async function upsertSchedules(queue: Workspace["scheduler"], rpcUrl: string, timeZone: string, list: JobSchedule[]) {
+type Queue = Workspace["scheduler"];
+type Schedule = NonNullable<Awaited<ReturnType<Queue["get"]>>>;
+const admits = (s: Schedule | null): s is Schedule => !!s && (s.state === "active" || s.state === "paused");
+
+/** The job's schedule that still admits runs: the one under the job's ID, else one that carries it as `ref`. */
+async function liveSchedule(queue: Queue, job: string, first: Schedule | null) {
+  if (admits(first)) return first;
+  let cursor: string | null | undefined;
+  do {
+    const page = await queue.list({ ref: job, limit: 500, ...(cursor ? { cursor } : {}) });
+    const found = page.items.find(admits);
+    if (found) return found;
+    cursor = page.cursor;
+  } while (cursor);
+  return null;
+}
+
+/** Creates each job's schedule, or updates one whose cron, time zone or callback differ, such as the app's URL after
+ * a restart on another port. A paused schedule stays paused. Returns what happened to each job. VERIFIED:
+ * defuss-scheduler keeps the ID of a removed or terminated schedule reserved, so after an agent removed or terminated
+ * one, the job gets a successor under a fresh ID; tests/jobs.test.ts covers it. Why find it by `ref` rather than
+ * store the ID: the app keeps no state of its own, and an agent sees which job a schedule belongs to. */
+export async function upsertSchedules(queue: Queue, rpcUrl: string, timeZone: string, list: JobSchedule[]) {
   const outcome: Record<string, "created" | "updated" | "unchanged"> = {};
   for (const { id, cron, methodName } of list) {
     const payload = { url: rpcUrl, className: "Jobs", methodName, args: [] };
-    const current = await queue.get(id);
-    if (!current || current.state === "removed" || current.state === "terminated") {
-      await queue.create({ id, cron, timezone: timeZone, handler: "_rpc", payload }, { requestId: crypto.randomUUID() });
+    const first = await queue.get(id);
+    const current = await liveSchedule(queue, id, first);
+    if (!current) {
+      const fresh = first ? id + "-" + crypto.randomUUID() : id;
+      await queue.create({ id: fresh, ref: id, cron, timezone: timeZone, handler: "_rpc", payload }, { requestId: crypto.randomUUID() });
       outcome[id] = "created";
     } else if (
       current.cron !== cron ||
@@ -36,7 +59,7 @@ export async function upsertSchedules(queue: Workspace["scheduler"], rpcUrl: str
       JSON.stringify(current.payload) !== JSON.stringify(payload)
     ) {
       await queue.update(
-        id,
+        current.id,
         { cron, timezone: timeZone, payload },
         { revision: current.revision, requestId: crypto.randomUUID() },
       );

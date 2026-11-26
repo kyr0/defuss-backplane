@@ -21,6 +21,8 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .env.test.local
 .env.production.local
 .env.local
+# MCP client config written by make mcp-config; it carries the bot key.
+.mcp.json
 
 # caches
 .eslintcache
@@ -38,6 +40,7 @@ output/*
 input/*
 .vae/SWARM_STATUS.yaml
 !input/acceptance.json
+!input/video.webm
 release/
 
 __pycache__/

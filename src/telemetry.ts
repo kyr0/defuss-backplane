@@ -95,6 +95,9 @@ export function createTelemetry(options: { root: string; push: boolean; warn: (m
     { unit: "By", description: "Bytes available to the daemon on the data root's volume" },
   );
   const schedulerFaults = obs.bindCounter("backplane.scheduler.errors");
+  // A counter without a sample is not exported; adding 0 makes the documented series exist from the start, so an
+  // alert on its rate has data before the first fault.
+  schedulerFaults(0);
   return {
     obs,
     /** The recorder for one module's calls over RPC and MCP. */

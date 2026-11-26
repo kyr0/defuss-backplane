@@ -12,7 +12,7 @@ ROOT        = ../..
 BACKPLANE   = deps/defuss-backplane
 BACKPLANE_TGZ = $(ROOT)/output/defuss-backplane-$(shell node -p "require('$(ROOT)/package.json').version").tgz
 
-.PHONY: help setup build start stop restart status log metrics bench test coverage lint e2e verify logs
+.PHONY: help setup build start stop restart status log metrics bench test coverage lint e2e verify logs mcp-config e2e-live
 .DEFAULT_GOAL := help
 
 help: ## list the verbs with their usage (default goal)
@@ -60,6 +60,14 @@ log: ## the last N=50 stdout and stderr entries merged by time, one JSON object 
 
 logs: log
 
+# The MCP client entry (`.mcp.json` format) for the app, which has no auth yet; the root's file gets it too, so a
+# session at the repository root sees the backplane and the app. scripts/e2e.ts writes its own for the built app.
+MCP_ENV ?= .env
+MCP_OUT ?= .mcp.json $(ROOT)/.mcp.json
+mcp-config: ## write the app's MCP client entry into .mcp.json here and at the repository root, other servers kept
+	@node $(ROOT)/scripts/mcp-config.ts --name $(NAME) --env $(MCP_ENV) --url 'http://127.0.0.1:$${PORT:-43180}/mcp' \
+	  $(foreach f,$(MCP_OUT),--out $(f))
+
 metrics: ## print the running backplane's metric lines for app="linear-clone" (reads .env like the app)
 	bun scripts/metrics.ts
 
@@ -75,7 +83,12 @@ coverage: ## measure line and function coverage; below 60 % it fails (bunfig.tom
 lint: ## run oxlint and the strict TypeScript checker
 	bun run lint
 
-e2e: build ## drive the built app with the real backplane in Chromium, Firefox and WebKit
+e2e: build ## drive the built app with the real backplane in Chromium, Firefox and WebKit, then run the deep suite
 	node scripts/e2e.ts
+
+# A second instance of the built app runs the deep suite in the workspace _e2e_test_linear-clone, which it wipes
+# before and after; the app make start runs and its workspace stay untouched.
+e2e-live: build ## run the deep RPC and MCP suite against the running backplane named in .env
+	node --env-file=.env scripts/deep-live.ts
 
 verify: lint test coverage e2e ## run every verification verb, cheapest first

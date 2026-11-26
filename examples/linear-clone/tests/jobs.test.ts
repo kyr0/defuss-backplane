@@ -103,6 +103,30 @@ test("a restart on another port updates the callback URL; an unchanged start lea
   expect(rollover).toMatchObject({ cron: "0 0 * * 1", timezone: "UTC", handler: "_rpc", state: "active" });
 });
 
+test("after an agent terminates or removes the schedules, the next start creates successors under the job's ref", async () => {
+  // VERIFIED: defuss-scheduler keeps a removed or terminated schedule's ID reserved, and the deep suite saw the next start
+  // fail with "Schedule ID is reserved".
+  const first = await start("retired");
+  const queue = (await connectBackplane({ app: "linear-clone", port: daemon.port, apiKey: daemon.apiKey }))
+    .tenant("retired")
+    .scheduler("jobs");
+  await queue.terminate({ schedule: "due-digest" }, { cause: "agent" });
+  const rollover = await queue.get("cycle-rollover");
+  await queue.remove("cycle-rollover", { revision: rollover!.revision, requestId: crypto.randomUUID() });
+  await first.close();
+  const second = await start("retired");
+  const live = (await queue.list({ limit: 500 })).items.filter((s) => s.state === "active");
+  expect(live.map((s) => [s.ref, (s.payload as { methodName: string }).methodName, (s.payload as { url: string }).url]).sort()).toEqual([
+    ["cycle-rollover", "cycleRollover", second.url + "/rpc"],
+    ["due-digest", "dueDigest", second.url + "/rpc"],
+  ]);
+  const defaults = schedules({ digestCron: "0 9 * * *", rolloverCron: "0 0 * * 1" });
+  expect(await upsertSchedules(queue, second.url + "/rpc", "UTC", defaults)).toEqual({
+    "due-digest": "unchanged",
+    "cycle-rollover": "unchanged",
+  });
+});
+
 test("the backplane delivers the digest callback, and an inbox item appears", async () => {
   await start("delivery", { DIGEST_CRON: "* * * * * *" });
   const notifications = (await connectBackplane({ app: "linear-clone", port: daemon.port, apiKey: daemon.apiKey }))

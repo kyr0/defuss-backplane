@@ -33,7 +33,7 @@ Cycle statistics are cached for 5 minutes and dropped when an issue of that cycl
 
 ## Why the backplane schedules the jobs
 
-The app runs no timer. At startup it creates or updates two schedules in the backplane's scheduler, whose RPC callbacks call `Jobs.dueDigest` and `Jobs.cycleRollover` on the app's own URL with the bot key. VERIFIED: with `DIGEST_CRON` set to every second, the real backplane delivers a callback and an inbox item appears (tests/jobs.test.ts). A timer in the app would miss runs while it is down and keep no history; the backplane's schedules retry and record each run.
+The app runs no timer. At startup it creates or updates two schedules in the backplane's scheduler, whose RPC callbacks call `Jobs.dueDigest` and `Jobs.cycleRollover` on the app's own URL with the bot key. VERIFIED: with `DIGEST_CRON` set to every second, the real backplane delivers a callback and an inbox item appears (tests/jobs.test.ts). A timer in the app would miss runs while it is down and keep no history; the backplane's schedules retry and record each run. VERIFIED: the backplane keeps the ID of a removed or terminated schedule reserved, and before the fix the next start failed with "Schedule ID is reserved" (the deep suite found it). Now a job without a live schedule gets a successor under a fresh ID, which carries the job's name as `ref`, and later starts find it by that ref. Why a ref rather than a stored ID: the app keeps no state of its own, and an agent sees which job a schedule belongs to (tests/jobs.test.ts).
 
 - The due digest adds an inbox item for the assignee of each open issue that is due today or overdue, once per issue and day.
 - The rollover closes a cycle that ended, opens the next one and moves its unfinished issues there, at most 52 cycles per call.
@@ -69,7 +69,12 @@ The workspace holds names of people, issue texts, comments and attachments, all 
 | Read the log | `make log` merges stdout and stderr by time, one JSON object per line; or the backplane's app log of `linear-clone`. |
 | Metrics | `make metrics` prints the backplane's call counts and durations for this app. |
 | Stop | `make stop` sends SIGTERM and kills after 5 seconds. |
+| Inspect the data as an agent | `make mcp-config` writes the app's MCP entry into `.mcp.json` here and at the repository root. |
 
 VERIFIED: `make start`, `status`, `log`, `metrics` and `stop` work against a running backplane, and the lifecycle verbs' JSON is tested with a real process in the repository's tests/service.test.ts, and a restart on another port updates the schedules' callback URL (tests/jobs.test.ts). Each log line starts with an ISO-8601 UTC timestamp and its level. VERIFIED: defuss-mcp prints one notice on stderr at startup, because the MCP endpoint answers in JSON mode.
+
+The e2e connects its MCP client from the file `make mcp-config` writes for the built app. It calls all 13 tools and their RPC functions: reads on the same state, writes on twin issues with IDs, titles and times masked, and every call states its expected outcome, a value or an HTTP status. Why stated outcomes: two equal failures would otherwise pass as a match. VERIFIED: that happened while the check was written, and the stated outcomes then exposed a 500 for a non-string cycle ID, now a 400. VERIFIED: with titles left unmasked, the check fails at `Issues.create`. Frontend coverage comes from Chromium's V8 coverage of the built `main.js`, mapped through its source map; the coverage of each document is kept before the journey reloads the page.
+
+The deep suite (`scripts/deep.ts`) runs one scenario per transport through a call function, so RPC and MCP pass the same assertions. Why one scenario instead of the twin comparison above: a twin comparison proves only that both transports agree, and two equally wrong answers pass. The deep suite states what each call must do. It runs on an instance of its own in `_e2e_test_linear-clone`, so `make e2e-live` can run beside the app `make start` runs without touching its workspace, and it starts with both jobs every second so the backplane delivers them during the run. VERIFIED: two consecutive runs against one backplane passed all 27 steps, and the second one passed only after the schedule fix above.
 
 To back up, back up the backplane's data root; the app has nothing else.

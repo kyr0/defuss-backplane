@@ -2,58 +2,28 @@
  * real defuss-backplane daemon and the built server there, and drives Chromium, Firefox and WebKit with
  * playwright-core. Chromium walks the whole journey; Firefox and WebKit open every route and create one issue. Every
  * page must stay free of console errors. Results go to output/e2e.json. */
-import { type ChildProcess, spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { execFile } from "node:child_process";
 import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { createServer } from "node:net";
+import { promisify } from "node:util";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Browser, type BrowserType, chromium, firefox, type Page, webkit } from "playwright-core";
+import { checkApi } from "./e2e-api.ts";
+import { runDeep } from "./e2e-deep.ts";
+import { freePort, launch, stop } from "./e2e-proc.ts";
+import { FLOOR, keepCoverage, reportCoverage, startCoverage } from "./e2e-coverage.ts";
 
 const root = join(import.meta.dirname, "..");
 const log = (message: string, fields: Record<string, string | number> = {}) =>
   console.log([new Date().toISOString(), "INFO e2e", message, ...Object.entries(fields).map(([k, v]) => k + "=" + v)].join(" "));
 
-async function freePort() {
-  const probe = createServer();
-  await new Promise<void>((done) => probe.listen(0, "127.0.0.1", done));
-  const address = probe.address();
-  await new Promise<void>((done) => probe.close(() => done()));
-  if (!address || typeof address === "string") throw new Error("No port");
-  return address.port;
-}
-
-/** Starts a child and resolves once a line of its stdout matches `ready`. */
-function launch(command: string[], cwd: string, env: Record<string, string>, ready: RegExp) {
-  const child = spawn(command[0]!, command.slice(1), { cwd, env: { PATH: process.env.PATH ?? "", ...env }, stdio: ["ignore", "pipe", "pipe"] });
-  let output = "";
-  return new Promise<ChildProcess>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("Not ready: " + command.join(" ") + "\n" + output)), 20_000);
-    const seen = (chunk: Buffer) => {
-      output += chunk;
-      if (ready.test(output)) {
-        clearTimeout(timer);
-        resolve(child);
-      }
-    };
-    child.stdout!.on("data", seen);
-    child.stderr!.on("data", (chunk: Buffer) => (output += chunk));
-    child.on("exit", (code) => reject(new Error(command.join(" ") + " exited with " + code + "\n" + output)));
-  });
-}
-
-const stop = (child: ChildProcess) =>
-  new Promise<void>((done) => {
-    if (child.exitCode !== null) return done();
-    child.removeAllListeners("exit");
-    child.once("exit", () => done());
-    child.kill("SIGTERM");
-  });
-
 export type Check = { browser: string; step: string; ok: boolean; error?: string };
 
-/** Opens a page that records console errors and uncaught exceptions. */
-async function openPage(browser: Browser, url: string) {
+/** Opens a page that records console errors and uncaught exceptions, and with `coverage` its JS coverage from the
+ * first script on. */
+async function openPage(browser: Browser, url: string, coverage = false) {
   // Wide enough that the board's five columns fit: a drag can only drop on a column inside the viewport.
   const page = await browser.newPage({ acceptDownloads: true, viewport: { width: 1600, height: 900 } });
   const errors: string[] = [];
@@ -65,6 +35,7 @@ async function openPage(browser: Browser, url: string) {
     if (r.status() < 400) return;
     errors.push(`HTTP ${r.status()} ${r.request().method()} ${new URL(r.url()).pathname}`);
   });
+  if (coverage) await startCoverage(page);
   await page.goto(url);
   await page.waitForSelector("[data-pm][data-ready]");
   return { page, errors };
@@ -98,6 +69,7 @@ type Step = [string, (page: Page, base: string) => Promise<void>];
 
 const ready = (page: Page) => page.waitForSelector("[data-pm][data-ready]");
 async function reload(page: Page) {
+  await keepCoverage(page);
   await page.reload();
   await ready(page);
 }
@@ -281,6 +253,7 @@ async function run() {
   const port = await freePort();
   const children: ChildProcess[] = [];
   const checks: Check[] = [];
+  let coverage: Awaited<ReturnType<typeof reportCoverage>> | null = null;
   try {
     children.push(
       await launch(
@@ -308,7 +281,7 @@ async function run() {
     for (const [name, engine, steps] of engines) {
       const browser = await engine.launch();
       try {
-        const { page, errors } = await openPage(browser, base);
+        const { page, errors } = await openPage(browser, base, name === "chromium");
         // A failed step ends the browser's journey: later steps build on its state.
         for (const [step, run] of steps) {
           try {
@@ -322,9 +295,30 @@ async function run() {
             break;
           }
         }
+        if (name === "chromium") {
+          const covered = await reportCoverage(page, root);
+          const step = `frontend line coverage of the journey is at least ${FLOOR} % (output/coverage-web)`;
+          const ok = covered.lines >= FLOOR;
+          checks.push({ browser: name, step, ok, ...(ok ? {} : { error: `lines ${covered.lines} %` }) });
+          coverage = covered;
+          log(ok ? "pass" : "FAIL", { browser: name, step: JSON.stringify(step), ...covered });
+        }
       } finally {
         await browser.close();
       }
+    }
+    // RPC and MCP against the same built app: the MCP client connects from what `make mcp-config` writes for it.
+    await writeFile(join(work, "mcp.env"), "PORT=" + port + "\n");
+    const written = await promisify(execFile)("make", ["-s", "mcp-config", "MCP_ENV=" + join(work, "mcp.env"), "MCP_OUT=" + join(work, "mcp.json")], { cwd: root });
+    log("mcp-config", { written: written.stdout.trim() });
+    for (const [step, error] of await checkApi(base.slice(0, -1), join(work, "mcp.json"))) {
+      checks.push({ browser: "rpc+mcp", step, ok: !error, ...(error ? { error } : {}) });
+      log(error ? "FAIL" : "pass", { browser: "rpc+mcp", step: JSON.stringify(step), ...(error ? { error: JSON.stringify(error) } : {}) });
+    }
+    // The deep suite in a workspace of its own, on a second instance of the built app against the same backplane.
+    for (const r of await runDeep({ root, work: join(work, "deep"), backplane: { port: backplanePort, apiKey } })) {
+      checks.push({ browser: "deep " + r.via, step: r.step, ok: r.ok, ...(r.error ? { error: r.error } : {}) });
+      log(r.ok ? "pass" : "FAIL", { browser: "deep " + r.via, step: JSON.stringify(r.step), ms: r.ms, ...(r.error ? { error: JSON.stringify(r.error.slice(0, 400)) } : {}) });
     }
   } finally {
     for (const child of children.reverse()) await stop(child);
@@ -332,7 +326,7 @@ async function run() {
   }
   await mkdir(join(root, "output"), { recursive: true });
   const failed = checks.filter((c) => !c.ok).length;
-  await writeFile(join(root, "output/e2e.json"), JSON.stringify({ at: new Date().toISOString(), routes: ROUTES.map(([h]) => h), checks }, null, 2) + "\n");
+  await writeFile(join(root, "output/e2e.json"), JSON.stringify({ at: new Date().toISOString(), routes: ROUTES.map(([h]) => h), coverage, checks }, null, 2) + "\n");
   log(failed ? "FAIL" : "PASS", { checks: checks.length, failed, report: "output/e2e.json" });
   if (failed) process.exit(1);
 }

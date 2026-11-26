@@ -86,6 +86,7 @@ describe("RPC", () => {
     expect(items.every((n) => n.person === "aron")).toBe(true);
     expect(await rpc.Inbox.markRead([items.find((n) => !n.read)!.id])).toBe(1);
     expect(await rpc.Inbox.markRead()).toBeGreaterThan(0);
+    expect(await fault(rpc.Inbox.markRead("n-1" as never))).toBe("400 INVALID_INPUT(ids)");
     expect((await rpc.Inbox.list()).some((n) => !n.read)).toBe(false);
   });
 
@@ -95,6 +96,7 @@ describe("RPC", () => {
     expect(current?.stats).toMatchObject({ scope: 15, days: 14, daysLeft: 9 });
     expect((await rpc.Cycles.stats("eng-24")).scope).toBe(15);
     expect(await fault(rpc.Cycles.stats("eng-1"))).toBe("404 NOT_FOUND");
+    expect(await fault(rpc.Cycles.stats(null as never))).toBe("400 INVALID_INPUT(id)");
   });
 });
 

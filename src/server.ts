@@ -21,19 +21,20 @@ import { startCallbacks } from "./callbacks.js";
 const limit = 1024 * 1024;
 const digest = (value: string) => createHash("sha256").update(value).digest();
 
-/** Reads at most 1 MiB of a request body; a larger one gets 413 before the protocol sees it. */
+/** Reads at most 1 MiB of a request body; a larger one gets 413 before the protocol sees it, after the rest of the
+ * body was read and dropped. VERIFIED by probe with Node.js on both sides: a 413 sent while the client was still
+ * sending closed the socket under it, and up to 9 of 10 clients saw EPIPE or ECONNRESET instead of the answer; a cap
+ * on the drain only moved the race to larger bodies. Why reading it all is safe: this runs after the bot key check,
+ * and a key holder can stream any size through /vfs/object anyway. */
 async function bounded(request: Request) {
-  if (Number(request.headers.get("content-length")) > limit)
-    return fault(413, "Body exceeds 1 MiB");
-  if (!request.body) return undefined;
+  if (!request.body) return Number(request.headers.get("content-length")) > limit ? fault(413, "Body exceeds 1 MiB") : undefined;
   const chunks: Uint8Array[] = [];
   let length = 0;
   for await (const chunk of request.body) {
     length += chunk.length;
-    if (length > limit) return fault(413, "Body exceeds 1 MiB");
-    chunks.push(chunk);
+    if (length <= limit) chunks.push(chunk);
   }
-  return Buffer.concat(chunks);
+  return length > limit ? fault(413, "Body exceeds 1 MiB") : Buffer.concat(chunks);
 }
 
 /** Starts a daemon with an RPC server of its own, so daemons in one process serve only their own functions. The CLI

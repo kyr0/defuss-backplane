@@ -23,8 +23,9 @@
         "@types/bun": "1.4.5",
         "@types/node": "^26.0.0",
         "defuss-db": "3.3.0",
-        "oxlint": "^1.0.0",
+        "oxlint": "1.94.0",
         "pkgroll": "^2.0.0",
+        "playwright-core": "1.65.1",
         "typescript": "5.9.3",
       },
     },
@@ -579,6 +580,8 @@
     "pkgroll": ["pkgroll@2.29.1", "", { "dependencies": { "@rollup/plugin-alias": "^6.0.0", "@rollup/plugin-commonjs": "^29.0.3", "@rollup/plugin-dynamic-import-vars": "^2.1.5", "@rollup/plugin-json": "^6.1.0", "@rollup/plugin-node-resolve": "^16.0.3", "cjs-module-lexer": "^2.2.1", "esbuild": "^0.28.2", "magic-string": "^1.2.2", "rollup": "^4.62.5", "rollup-plugin-import-trace": "^1.0.1", "rollup-pluginutils": "^2.8.2", "signal-exit": "4.1.0", "yaml": "^2.9.0" }, "peerDependencies": { "@typescript/typescript6": "^6", "typescript": "^4.1 || ^5.0 || ^6.0 || ^7.0" }, "optionalPeers": ["@typescript/typescript6", "typescript"], "bin": { "pkgroll": "dist/cli.mjs" } }, "sha512-2zQ1E1tPVxZtQz9wN+uTetJZKwj548xQGyAlWgVkhge31pJBt4R8poDrkWVvuYNkosrjpL8i6op5gBGWJyOEQg=="],
 
     "platform": ["platform@1.3.6", "", {}, "sha512-fnWVljUchTro6RiCFvCXBbNhJc2NijN7oIQxbwsyL0buWJPG85v81ehlHI9fXrJsMNgTofEoWIQeClKpgxFLrg=="],
+
+    "playwright-core": ["playwright-core@1.65.1", "", { "bin": { "playwright-core": "cli.js" } }, "sha512-hqPpz7blSMPxWVdoeE1yiBSzXsKiVOd2k+kjCvmUywD2GPO2Dd9HfcWnq9NN0GHbNZDFgZ9JfBFr+X5/BLo0qw=="],
 
     "promise-limit": ["promise-limit@2.7.0", "", {}, "sha512-7nJ6v5lnJsXwGprnGXga4wx6d1POjvi5Qmf1ivTRxTjH4Z/9Czja/UCMLVmB9N93GeWOU93XaFaEt6jbuoagNw=="],
 

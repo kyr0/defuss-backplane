@@ -102,7 +102,7 @@ The handle is a defuss-logs batch writer. A logger in the application formats, r
 
 | Operation | Result |
 | --- | --- |
-| `logs.write(entries)` | Appends 1 to 1,000 entries in one transaction and returns `{written}`. An entry needs `level` (`trace`, `debug`, `info`, `warn`, `error` or `fatal`) and `message`. It may carry `args`, `context`, a `ts` Date and an `id`. The daemon assigns a missing `id` and `ts`. An entry that repeats a stored `ts` and `id` fails the whole call with `ALREADY_EXISTS`. |
+| `logs.write(entries)` | Appends 1 to 1,000 entries in one transaction and returns `{written}`. An entry needs `level` (`trace`, `debug`, `info`, `warn`, `error` or `fatal`) and `message`. It may carry `args`, `context`, a `ts` Date and an `id`, which must be a UUID. The daemon assigns a missing `id` and `ts`. An entry that repeats a stored `ts` and `id` fails the whole call with `ALREADY_EXISTS`. |
 | `logs.read(request?)` | Returns `{records,nextAfter}` in time order. `from` is inclusive and `before` exclusive. `levels` filters, and `limit` defaults to 100 with a maximum of 1,000. Pass `nextAfter` as `after` for the next page. |
 
 Records of the same millisecond come back in the order of their IDs, not of their writes. The MCP tools `logs.write` and `logs.read` take a scope of `app` and an optional `tenant`. Over MCP the daemon stamps each entry, and timestamps travel as ISO-8601 strings. Reading a record whose arguments hold dates, binary or bigint values needs `resultEncoding: "dson"`. The daemon neither rotates nor expires logs, so a log grows until its directory is deleted.
@@ -223,11 +223,11 @@ RPC error bodies carry `{code,error,status}`. The SDK throws `BackplaneError` wi
 | INVALID_ARGUMENT | 400 | Correct the arguments. |
 | UNAUTHORIZED | 401 | Send the bot key as a bearer token. |
 | FORBIDDEN | 403 | Use the loopback URL and port, and send no Origin header. |
-| NOT_FOUND | 404 | Check the endpoint path. A download of a missing object, through either file route, or an edit of an unknown schedule also returns this code. |
+| NOT_FOUND | 404 | Check the endpoint path. A download of a missing object, through either file route, or an edit of an unknown schedule also returns this code. An unknown path gets a plain-text `Not Found` from the listener instead of a JSON body. |
 | METHOD_NOT_ALLOWED | 405 | Use the method named in the `Allow` header. |
 | ALREADY_EXISTS | 409 | Choose a different ID or edit the existing row or schedule. A log batch that fails this way was already stored. |
 | REVISION_CONFLICT | 409 | Read the current version before deciding whether to retry. |
-| PAYLOAD_TOO_LARGE | 413 | Keep `/rpc` and `/mcp` requests under 1 MiB. Stream larger files through `/vfs/object`. |
+| PAYLOAD_TOO_LARGE | 413 | Keep `/rpc` and `/mcp` requests under 1 MiB. Stream larger files through `/vfs/object`. The daemon reads an oversized body to its end before it answers, so the sender receives this code instead of a broken connection. |
 | BUSY | 503 | Retry with backoff. Repeat a scheduler call with the same request ID and arguments. |
 | COMMIT_UNCERTAIN | 500 | Inspect the persisted value before issuing another write. Repeat a scheduler call with its original request ID. |
 | STORAGE_ERROR | 500 | Inspect the store and filesystem. |
@@ -244,7 +244,15 @@ curl -fsS -H "Authorization: Bearer ${API_KEY}" http://127.0.0.1:43127/rpc \
   --json '{"className":"cache","methodName":"set","args":[{"app":"shop","tenant":"acme","bucket":"catalog"},"currency","EUR"]}'
 ```
 
-Configure the agent's Streamable HTTP transport with endpoint `http://127.0.0.1:43127/mcp` and the same Authorization header. Tool discovery lists the ten cache and document operations, `vfs.put`, `vfs.get`, `vfs.head`, `vfs.list` and `vfs.delete`, and `logs.write` and `logs.read`, and the twelve `scheduler.` management tools, each with its input schema. For example, call `cache.get` with these arguments.
+Configure the agent's Streamable HTTP transport with endpoint `http://127.0.0.1:43127/mcp` and the same Authorization header. In the source tree, `make mcp-config` writes this entry into `.mcp.json`, the project file Claude Code reads, with `PORT` and `API_KEY` from `.env`:
+
+```json
+{"mcpServers":{"defuss-backplane":{"type":"http","url":"http://127.0.0.1:43127/mcp","headers":{"Authorization":"Bearer <API_KEY>"}}}}
+```
+
+The file is gitignored and written with mode 600, because it holds the bot key. Entries of other servers stay; linear-clone's `make mcp-config` adds its own entry to the same file. The packed-consumer test connects from a file that `make mcp-config` wrote for its throwaway daemon.
+
+Tool discovery lists the ten cache and document operations, `vfs.put`, `vfs.get`, `vfs.head`, `vfs.list` and `vfs.delete`, and `logs.write` and `logs.read`, and the twelve `scheduler.` management tools, each with its input schema. For example, call `cache.get` with these arguments.
 
 ```json
 {"scope":{"app":"shop","tenant":"acme","bucket":"catalog"},"key":"currency"}
@@ -277,7 +285,7 @@ A probe returns `{"service":"defuss-backplane","status":"pass","checks":[{"name"
 | `backplane_store_handles` | gauge | `module` (cache, db, vfs or logs), `state` (busy or idle) | Open store handles. A module keeps at most 32 and answers `BUSY` beyond that. |
 | `backplane_http_active` | gauge | `kind` (requests, streams or uploads) | Requests in progress, response bodies streaming and request bodies arriving. |
 | `backplane_callback_duration` | histogram, seconds | `app`, `outcome` (`ok`, `failed` or `rejected`) | Each RPC callback. A failed call is retried, a rejected one is not. |
-| `backplane_scheduler_errors_total` | counter | none | Faults of the scheduler's background loop, each also logged as an ERROR line. |
+| `backplane_scheduler_errors_total` | counter | none | Faults of the scheduler's background loop, each also logged as an ERROR line. It exists from startup at 0, so a rate alert has data before the first fault. |
 
 defuss-o11y adds process uptime, resident memory, readiness, and success per check and per gauge callback. An unknown HTTP method is counted as `_OTHER`, and a call whose scope is invalid has no `app` label. Tenant, bucket and key names never appear in a label. OTLP keeps the dotted names, such as `backplane.operation.duration`. Prometheus output carries the unit in a `# UNIT` line instead of a name suffix.
 
@@ -303,5 +311,18 @@ App, tenant and bucket identifiers accept 1 to 48 valid UTF-8 bytes, and an app 
 ## Development
 
 Install the versions in `mise.toml`, then run `make setup` and `make verify`. The latter runs lint, type checking, real storage and protocol tests, coverage, and a packed-consumer test across Node.js and Bun. The sources, tests and verification scripts are TypeScript. The strict compiler checks all three, so lint fails when a test or script calls the API with the wrong types. The packed-consumer test needs `curl`, `lsof` and npm on the `PATH`. `make setup` also creates a missing `.env` from `.env.example` with a random `API_KEY`, readable only by you. It never rewrites an existing one. Use `make start` for the Node.js daemon or `make start RUNTIME=bun` for Bun. `make start` builds quietly and prints one JSON object with the state, pid and URL. Without `.env` it reports `"state":"unconfigured"` with `"fix":"make setup"`. A daemon that exits at startup is reported as `"state":"dead"` with its last stderr lines. `make status` prints the same object and exits 1 only for a dead daemon. `make log`, or `make logs`, prints the last N=50 entries of stdout and stderr merged by time, one JSON object per line with `ts`, `stream`, `level`, `msg` and `fields`. `make stop` stops the source-tree daemon. `FORMAT=text` prints readable lines instead of JSON.
+
+### Deep suite
+
+`scripts/deep/run.ts` tests every subsystem through RPC and through MCP, and the plain HTTP routes once. It writes only to the tenant `_e2e_test_backplane` of the app `deep-e2e`, in buckets named after the run, and deletes its cache keys, documents and files. Log records and terminated schedules stay, because the daemon deletes neither. A full run fails when an RPC method, an MCP tool or a tool argument in the daemon's schema went unused.
+
+| Part | What it checks |
+| --- | --- |
+| cache, db, logs, scheduler, vfs | Each documented behavior and error code, once over RPC and once over MCP. Worker leases run over RPC, the only transport that has them. An `_rpc` schedule calls a local defuss-rpc server, which checks the bot key and the `X-Backplane-*` headers. |
+| http | `/vfs/object` conditions, every row of the `/files` header table, Content-Type and `nosniff`, the typed client's upload and download, probes, metric names, and the codes for a missing key, an Origin, a foreign Host, an unknown path, a wrong method and an oversized body. |
+| video | Chromium plays `input/video.webm` through a proxy of `/files` and seeks, which must read a 206 range from inside the object. `make fixtures` regenerates the clip with ffmpeg. It is VP9 because Playwright's Chromium has no H.264. |
+| big | 512 MiB of random bytes up through `upload` and back through `download`, `/vfs/object` and `/files`, each checked by SHA-256, after `backplane_storage_free` shows room for three copies. The daemon's resident memory must grow by less than a quarter of the object during each transfer. |
+
+`make e2e` runs the suite once against its Node.js daemon and writes `output/deep.json`, with the transfer times and memory growth. `make e2e-live` runs it against the daemon `make start` runs, through the `.mcp.json` that `make mcp-config` wrote, and writes `output/deep-live.json`. `make setup` installs the Chromium build that playwright-core 1.65.1 expects.
 
 In a Git working tree, `make gate` runs the vendored defuss-vae verifier. Its review and documentation prompts apply to the current source fingerprint. Storage and transport decisions are in [ARCH.md](ARCH.md).
